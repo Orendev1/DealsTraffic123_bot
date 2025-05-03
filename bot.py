@@ -10,7 +10,7 @@ SHEETBEST_API_URL = "https://api.sheetbest.com/sheets/5a048120-f758-4f56-9e45-d0
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# פונקציית עיבוד ושליחה לגוגל שיט
+# 1פונקציית עיבוד ושליחה לגוגל שיט
 def parse_and_send_to_sheet(text):
     now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
 
