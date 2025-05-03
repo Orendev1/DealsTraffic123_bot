@@ -3,19 +3,15 @@ from flask import Flask, request
 import requests
 import datetime
 import os
-import time
 
-# טוקן של הבוט
 BOT_TOKEN = "7652567138:AAFwyX0Cc7cgwzQhz37LnvnSoweyC778YbE"
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# כתובת ה־API של Sheet.best
 SHEETBEST_API_URL = "https://api.sheetbest.com/sheets/5a048120-f758-4f56-9e45-d059bac1f2bf"
 
-# אפליקציית Flask
 app = Flask(__name__)
 
-# פונקציה ששולחת הודעה ל־Google Sheet דרך Sheet.best
+# שליחת הודעה ל־SheetBest
 def parse_and_send_to_sheet(text):
     now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
     data = {
@@ -35,29 +31,27 @@ def parse_and_send_to_sheet(text):
     except Exception as e:
         print("Error sending to sheet:", e)
 
-# מקבל כל הודעה מהבוט
+# טיפול בהודעות
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
     parse_and_send_to_sheet(message.text)
 
-# Webhook route - טלגרם ישלח הודעות לכאן
-@app.route(f"/{BOT_TOKEN}", methods=["POST"])
+# Webhook route
+@app.route(f'/{BOT_TOKEN}', methods=['POST'])
 def webhook():
-    json_str = request.get_data().decode("UTF-8")
+    json_str = request.get_data().decode('UTF-8')
     update = telebot.types.Update.de_json(json_str)
     bot.process_new_updates([update])
     return "!", 200
 
-# עמוד בית (לבדיקה ידנית)
-@app.route("/", methods=["GET"])
+# עמוד בית
+@app.route('/', methods=['GET'])
 def index():
     return "Bot is running!", 200
 
-# הפעלת השרת והגדרת webhook
-if __name__ == "__main__":
+# הגדרת webhook והרצת השרת
+if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))
-    webhook_url = f"https://dealstraffic123bot-production.up.railway.app/{BOT_TOKEN}"
     bot.remove_webhook()
-    time.sleep(1)
-    bot.set_webhook(url=webhook_url)
-    app.run(host="0.0.0.0", port=port)
+    bot.set_webhook(url=f"https://dealstraffic123bot-production.up.railway.app/{BOT_TOKEN}")
+    app.run(host='0.0.0.0', port=port)
