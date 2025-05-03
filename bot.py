@@ -7,17 +7,19 @@ import os
 # טוקן של הבוט
 BOT_TOKEN = "7652567138:AAFwyX0Cc7cgwzQhz37LnvnSoweyC778YbE"
 bot = telebot.TeleBot(BOT_TOKEN)
-WEBHOOK_URL = "https://dealstraffic123bot-production.up.railway.app/" + BOT_TOKEN
-bot.remove_webhook()
-bot.set_webhook(url=WEBHOOK_URL)
 
 # כתובת Sheet.best שלך
 SHEETBEST_API_URL = "https://api.sheetbest.com/sheets/5a048120-f758-4f56-9e45-d059bac1f2bf"
 
-# אפליקציית Flask
+# הגדרת Webhook
+WEBHOOK_URL = "https://dealstraffic123bot-production.up.railway.app/" + BOT_TOKEN
+bot.remove_webhook()
+bot.set_webhook(url=WEBHOOK_URL)
+
+# Flask app
 app = Flask(__name__)
 
-# פונקציה ששולחת את הטקסט ל־Sheet.best
+# פונקציה ששולחת את ההודעה ל־Google Sheets דרך Sheet.best
 def parse_and_send_to_sheet(text):
     now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
     data = {
@@ -31,7 +33,6 @@ def parse_and_send_to_sheet(text):
         "Cap": "",
         "Raw Message": text
     }
-
     try:
         response = requests.post(SHEETBEST_API_URL, json=data)
         print("Data sent:", response.status_code)
@@ -43,7 +44,7 @@ def parse_and_send_to_sheet(text):
 def handle_message(message):
     parse_and_send_to_sheet(message.text)
 
-# Webhook route
+# נתיב עבור Webhook
 @app.route(f'/{BOT_TOKEN}', methods=['POST'])
 def webhook():
     json_str = request.get_data().decode('UTF-8')
@@ -51,14 +52,12 @@ def webhook():
     bot.process_new_updates([update])
     return "!", 200
 
-# ברירת מחדל – עמוד בית
+# עמוד בית לבדיקה
 @app.route('/', methods=['GET'])
 def index():
     return "Bot is running!", 200
 
-# הרצת Flask והגדרת webhook
+# הפעלת שרת Flask
 if __name__ == "__main__":
-    bot.remove_webhook()
-    bot.set_webhook(url=f"https://dealstraffic123bot-production.up.railway.app/{BOT_TOKEN}")
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
