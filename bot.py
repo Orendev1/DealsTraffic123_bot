@@ -1,19 +1,20 @@
 import telebot
+from flask import Flask, request
 import requests
 import datetime
 import os
-from flask import Flask, request
 
 # טוקן של הבוט
 BOT_TOKEN = "7652567138:AAFwyX0Cc7cgwzQhz37LnvnSoweyC778YbE"
+bot = telebot.TeleBot(BOT_TOKEN)
 
-# כתובת API של Sheet.best
+# כתובת Sheet.best שלך
 SHEETBEST_API_URL = "https://api.sheetbest.com/sheets/5a048120-f758-4f56-9e45-d059bac1f2bf"
 
-bot = telebot.TeleBot(BOT_TOKEN)
+# אפליקציית Flask
 app = Flask(__name__)
 
-# פונקציה ששולחת טקסט לטבלת גוגל שיטס
+# פונקציה ששולחת את הטקסט ל־Sheet.best
 def parse_and_send_to_sheet(text):
     now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
     data = {
@@ -27,27 +28,32 @@ def parse_and_send_to_sheet(text):
         "Cap": "",
         "Raw Message": text
     }
+
     try:
         response = requests.post(SHEETBEST_API_URL, json=data)
         print("Data sent:", response.status_code)
     except Exception as e:
         print("Error sending to sheet:", e)
 
-# מטפל בהודעות נכנסות
+# מסנן הודעות טקסט מהבוט
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
     parse_and_send_to_sheet(message.text)
 
-# הגדרת ה־Webhook
-@app.route('/', methods=['POST'])
+# Webhook route
+@app.route(f'/{BOT_TOKEN}', methods=['POST'])
 def webhook():
-    if request.method == 'POST':
-        update = telebot.types.Update.de_json(request.stream.read().decode("utf-8"))
-        bot.process_new_updates([update])
-        return '', 200
+    json_str = request.get_data().decode('UTF-8')
+    update = telebot.types.Update.de_json(json_str)
+    bot.process_new_updates([update])
+    return "!", 200
 
+# ברירת מחדל – עמוד בית
+@app.route('/', methods=['GET'])
+def index():
+    return "Bot is running!", 200
+
+# הרצת Flask
 if __name__ == "__main__":
-    WEBHOOK_URL = f"https://{os.environ.get('RAILWAY_STATIC_URL', 'your-subdomain.railway.app')}"
-    bot.remove_webhook()
-    bot.set_webhook(url=WEBHOOK_URL)
-    app.run(host="0.0.0.0", port=int(os.environ.get('PORT', 5000)))
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
