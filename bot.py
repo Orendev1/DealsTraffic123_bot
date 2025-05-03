@@ -7,6 +7,9 @@ import os
 # טוקן של הבוט
 BOT_TOKEN = "7652567138:AAFwyX0Cc7cgwzQhz37LnvnSoweyC778YbE"
 bot = telebot.TeleBot(BOT_TOKEN)
+WEBHOOK_URL = "https://dealstraffic123bot-production.up.railway.app/" + BOT_TOKEN
+bot.remove_webhook()
+bot.set_webhook(url=WEBHOOK_URL)
 
 # כתובת Sheet.best שלך
 SHEETBEST_API_URL = "https://api.sheetbest.com/sheets/5a048120-f758-4f56-9e45-d059bac1f2bf"
