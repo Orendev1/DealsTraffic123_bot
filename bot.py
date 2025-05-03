@@ -4,22 +4,13 @@ import requests
 import datetime
 import os
 
-# טוקן של הבוט
 BOT_TOKEN = "7652567138:AAFwyX0Cc7cgwzQhz37LnvnSoweyC778YbE"
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# כתובת Sheet.best שלך
 SHEETBEST_API_URL = "https://api.sheetbest.com/sheets/5a048120-f758-4f56-9e45-d059bac1f2bf"
 
-# הגדרת Webhook
-WEBHOOK_URL = "https://dealstraffic123bot-production.up.railway.app/" + BOT_TOKEN
-bot.remove_webhook()
-bot.set_webhook(url=WEBHOOK_URL)
-
-# Flask app
 app = Flask(__name__)
 
-# פונקציה ששולחת את ההודעה ל־Google Sheets דרך Sheet.best
 def parse_and_send_to_sheet(text):
     now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
     data = {
@@ -39,12 +30,10 @@ def parse_and_send_to_sheet(text):
     except Exception as e:
         print("Error sending to sheet:", e)
 
-# מסנן הודעות טקסט מהבוט
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
     parse_and_send_to_sheet(message.text)
 
-# נתיב עבור Webhook
 @app.route(f'/{BOT_TOKEN}', methods=['POST'])
 def webhook():
     json_str = request.get_data().decode('UTF-8')
@@ -52,12 +41,12 @@ def webhook():
     bot.process_new_updates([update])
     return "!", 200
 
-# עמוד בית לבדיקה
 @app.route('/', methods=['GET'])
 def index():
     return "Bot is running!", 200
 
-# הפעלת שרת Flask
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
+    bot.remove_webhook()
+    bot.set_webhook(url=f"https://dealstraffic123bot-production.up.railway.app/{BOT_TOKEN}")
     app.run(host="0.0.0.0", port=port)
