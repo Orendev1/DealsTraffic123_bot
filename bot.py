@@ -53,7 +53,9 @@ def webhook():
 def index():
     return "Bot is running!", 200
 
-# הרצת Flask
+# הרצת Flask והגדרת webhook
 if __name__ == "__main__":
+    bot.remove_webhook()
+    bot.set_webhook(url=f"https://dealstraffic123bot-production.up.railway.app/{BOT_TOKEN}")
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
