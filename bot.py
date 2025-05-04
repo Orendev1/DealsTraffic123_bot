@@ -4,14 +4,17 @@ import requests
 import datetime
 import os
 
-BOT_TOKEN = "7652567138:AAFwyX0Cc7cgwzQhz37LnvnSoweyC778YbE"
+# טוקן מה־Environment Variable
+BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 bot = telebot.TeleBot(BOT_TOKEN)
 
+# קישור ל־Sheet.best
 SHEETBEST_API_URL = "https://api.sheetbest.com/sheets/5a048120-f758-4f56-9e45-d059bac1f2bf"
 
+# Flask app
 app = Flask(__name__)
 
-# שליחת הודעה ל־SheetBest
+# שליחת נתונים ל־Google Sheet
 def parse_and_send_to_sheet(text):
     now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
     data = {
@@ -31,7 +34,7 @@ def parse_and_send_to_sheet(text):
     except Exception as e:
         print("Error sending to sheet:", e)
 
-# טיפול בהודעות
+# טיפול בכל הודעה
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
     parse_and_send_to_sheet(message.text)
@@ -44,12 +47,12 @@ def webhook():
     bot.process_new_updates([update])
     return "!", 200
 
-# עמוד בית
+# בדיקת בריאות
 @app.route('/', methods=['GET'])
 def index():
     return "Bot is running!", 200
 
-# הגדרת webhook והרצת השרת
+# התחלת השרת
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))
     bot.remove_webhook()
