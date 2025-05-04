@@ -4,17 +4,17 @@ import requests
 import datetime
 import os
 
-# טוקן מה־Environment Variable
-BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+# Telegram bot token
+BOT_TOKEN = "7652567138:AAFwyX0Cc7cgwzQhz37LnvnSoweyC778YbE"
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# קישור ל־Sheet.best
-SHEETBEST_API_URL = "https://api.sheetbest.com/sheets/5a048120-f758-4f56-9e45-d059bac1f2bf"
+# Sheet.Best API URL – your new connection
+SHEETBEST_API_URL = "https://api.sheetbest.com/sheets/02cad9d3-4907-4a43-a139-e10666a74ed3"
 
 # Flask app
 app = Flask(__name__)
 
-# שליחת נתונים ל־Google Sheet
+# Function to send data to Google Sheet
 def parse_and_send_to_sheet(text):
     now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
     data = {
@@ -28,13 +28,14 @@ def parse_and_send_to_sheet(text):
         "Cap": "",
         "Raw Message": text
     }
+
     try:
         response = requests.post(SHEETBEST_API_URL, json=data)
         print("Data sent:", response.status_code)
     except Exception as e:
         print("Error sending to sheet:", e)
 
-# טיפול בכל הודעה
+# Telegram message handler
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
     parse_and_send_to_sheet(message.text)
@@ -47,12 +48,12 @@ def webhook():
     bot.process_new_updates([update])
     return "!", 200
 
-# בדיקת בריאות
+# Home route
 @app.route('/', methods=['GET'])
 def index():
     return "Bot is running!", 200
 
-# התחלת השרת
+# Set webhook and run app
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))
     bot.remove_webhook()
