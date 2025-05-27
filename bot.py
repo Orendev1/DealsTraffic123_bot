@@ -1,94 +1,64 @@
-import telebot
+
 import os
-import re
 import json
-from datetime import datetime
+import re
 import gspread
-from google.oauth2 import service_account
+from oauth2client.service_account import ServiceAccountCredentials
+from telegram import Update
+from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
+from parser import parse_deals
 
-# === Load ENV ===
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-SPREADSHEET_NAME = os.getenv("SPREADSHEET_NAME")
+# Load keywords from JSON
+def load_keywords(file_path='keywords.json'):
+    with open(file_path, 'r', encoding='utf-8') as f:
+        return json.load(f)
 
-# === Setup Google Sheets ===
-json_creds = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
-if not json_creds:
-    raise ValueError("Missing GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable")
+# Determine if a message qualifies as a deal based on keyword categories
+def is_deal_message(text, keywords):
+    text_lower = text.lower()
+    matched_categories = set()
+    for category, terms in keywords.items():
+        for term in terms:
+            if term.lower() in text_lower:
+                matched_categories.add(category)
+                break
+    return len(matched_categories) >= 2
 
-service_account_info = json.loads(json_creds)
-scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-credentials = service_account.Credentials.from_service_account_info(service_account_info, scopes=scope)
-gc = gspread.authorize(credentials)
-sheet = gc.open(SPREADSHEET_NAME).sheet1
+# Google Sheets setup
+def setup_google_sheets():
+    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+    creds = ServiceAccountCredentials.from_json_keyfile_name('google-credentials.json', scope)
+    client = gspread.authorize(creds)
+    sheet = client.open("Telegram Bot Deals").sheet1
+    return sheet
 
-# === Init Bot ===
-bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
+# Handle messages
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
+    if not text:
+        return
 
-# === Patterns ===
-GEO_PATTERN = re.compile(r"(?<!\w)([A-Z]{2}|GCC|LATAM|ASIA|NORDICS)(?=\s|:|\n)")
-CPA_PATTERN = re.compile(r"(?:\$?)(\d{2,5})(?:\s*CPL|\s*CPA)?", re.IGNORECASE)
-CRG_PATTERN = re.compile(r"\+?\s*(\d{1,2})%\s*(?:CR|CRG|Conv|Conversion Guarantee)?", re.IGNORECASE)
-FUNNEL_PATTERN = re.compile(r"Funnels?:\s*(.+?)(?=\n|Source|Traffic|Cap|\Z)", re.IGNORECASE | re.DOTALL)
-SOURCE_PATTERN = re.compile(r"(?:Source|Traffic):\s*([\w/\-+ ]+)", re.IGNORECASE)
-CAP_PATTERN = re.compile(r"Cap[:\s]+(\d{1,4})", re.IGNORECASE)
-NEGOTIATION_PATTERN = re.compile(r"\b(?:can we do|negotiate|instead|work on|maybe|can you reduce|let's make it)\b", re.IGNORECASE)
+    if not hasattr(context.application, "keywords"):
+        context.application.keywords = load_keywords()
 
-# === Message Handling ===
-@bot.message_handler(func=lambda message: True)
-def handle_message(message):
-    text = message.text.strip()
-    username = message.from_user.username or message.from_user.first_name
-    deals = extract_deals(text)
-    for deal in deals:
-        row = [
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            username,
-            deal.get("geo", ""),
-            deal.get("cpa", ""),
-            deal.get("crg", ""),
-            deal.get("funnels", ""),
-            deal.get("source", ""),
-            deal.get("cap", ""),
-            deal.get("raw_message", text),
-            deal.get("tag", "")
-        ]
-        sheet.append_row(row, value_input_option="USER_ENTERED")
-        # Silent mode: no reply to chat
+    if not hasattr(context.application, "sheet"):
+        context.application.sheet = setup_google_sheets()
 
-
-def extract_deals(text):
-    matches = list(GEO_PATTERN.finditer(text))
-    if not matches:
-        return [{"geo": "", "raw_message": text}]
-
-    deals = []
-    for i, match in enumerate(matches):
-        geo = match.group(1)
-        start = match.start()
-        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
-        block = text[start:end].strip()
-
-        deal = {
-            "geo": geo,
-            "raw_message": block,
-            "tag": "Negotiation" if NEGOTIATION_PATTERN.search(block) else ""
-        }
-
-        if (m := CPA_PATTERN.search(block)):
-            deal["cpa"] = int(m.group(1))
-        if (m := CRG_PATTERN.search(block)):
-            deal["crg"] = int(m.group(1))
-        if (m := FUNNEL_PATTERN.search(block)):
-            cleaned = m.group(1).replace("\n", ", ")
-            deal["funnels"] = ", ".join([f.strip() for f in cleaned.split(",") if f.strip()])
-        if (m := SOURCE_PATTERN.search(block)):
-            deal["source"] = m.group(1).strip()
-        if (m := CAP_PATTERN.search(block)):
-            deal["cap"] = int(m.group(1))
-
-        deals.append(deal)
-
-    return deals
-
-# === Start Bot ===
-bot.polling()
+    if is_deal_message(text, context.application.keywords):
+        deals = parse_deals(text)
+        for deal in deals:
+            row = [
+                update.message.date.isoformat(),
+                update.effective_chat.title or update.effective_user.username,
+                deal.get("GEO"),
+                deal.get("CPA"),
+                deal.get("CRG"),
+                deal.get("CPL"),
+                deal.get("Deal Type"),
+                deal.get("Funnel"),
+                deal.get("Source"),
+                deal.get("Cap"),
+                deal.get("CR"),
+                text  # raw message
+            ]
+            context.application.sheet.append_row(row)
