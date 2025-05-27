@@ -11,9 +11,9 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 SPREADSHEET_NAME = os.getenv("SPREADSHEET_NAME")
 
 # === Setup Google Sheets ===
-json_creds = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+json_creds = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 if not json_creds:
-    raise ValueError("Missing GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable")
+    raise ValueError("Missing GOOGLE_APPLICATION_CREDENTIALS environment variable")
 
 service_account_info = json.loads(json_creds)
 scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
@@ -60,8 +60,7 @@ def extract_deals(text):
     deals = []
     for geo in geos:
         deal = {"geo": geo, "tag": ""}
-        block_pattern = re.compile(rf"{geo}[^
-]*((?:\n.*?)*?)(?=\n[A-Z]{{2}}|\Z)", re.IGNORECASE)
+        block_pattern = re.compile(rf"{geo}[^\n]*((?:\n.*?)*?)(?=\n[A-Z]{{2}}|\Z)", re.IGNORECASE)
         block_match = block_pattern.search(text)
         if block_match:
             block = f"{geo}{block_match.group(1)}".strip()
