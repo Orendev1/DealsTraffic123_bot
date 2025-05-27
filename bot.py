@@ -3,28 +3,29 @@ import telebot
 import os
 import pandas as pd
 import gspread
-import json
 from datetime import datetime
 from google.oauth2 import service_account
 
-# Environment Variables
+# Load credentials from file
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+credentials = service_account.Credentials.from_service_account_file("google-credentials.json", scopes=scope)
+
+# Get environment variables
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 SPREADSHEET_NAME = os.getenv("SPREADSHEET_NAME")
 
-# Load Google credentials from ENV (json string)
-creds_dict = json.loads(os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON"))
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-credentials = service_account.Credentials.from_service_account_info(creds_dict, scopes=scope)
-
-# Connect to Google Sheet
+# Connect to Google Sheets
 gc = gspread.authorize(credentials)
 sh = gc.open(SPREADSHEET_NAME)
 worksheet = sh.sheet1
 
-# Start Telegram Bot
+# Start the Telegram bot
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
-# Extract functions
+headers = ['Affiliate Name', 'Geo', 'CPA', 'CG%', 'Funnels', 'Source Type', 'Quantity', 'Comments', 'Last Update']
+if worksheet.row_values(1) != headers:
+    worksheet.insert_row(headers, index=1)
+
 def extract_price(text):
     import re
     match = re.search(r'\$?(\d+(?:\.\d{1,2})?)', text)
@@ -71,11 +72,6 @@ def extract_deals_from_text(text, group_name):
         'Comments': '',
         'Last Update': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
-
-# Ensure headers
-headers = ['Affiliate Name', 'Geo', 'CPA', 'CG%', 'Funnels', 'Source Type', 'Quantity', 'Comments', 'Last Update']
-if worksheet.row_values(1) != headers:
-    worksheet.insert_row(headers, index=1)
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
