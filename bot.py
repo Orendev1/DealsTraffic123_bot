@@ -1,91 +1,87 @@
+
 import telebot
 import os
-from dotenv import load_dotenv
 import pandas as pd
-from datetime import datetime
-import re
-import json
-from google.oauth2 import service_account
 import gspread
+from datetime import datetime
+from google.oauth2 import service_account
 
-# Load environment variables
-load_dotenv()
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+# Telegram Bot Token and Spreadsheet Name from environment variables
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 SPREADSHEET_NAME = os.getenv("SPREADSHEET_NAME")
-creds_json = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
-creds_dict = json.loads(creds_json)
 
-bot = telebot.TeleBot(BOT_TOKEN)
-
-# Google Sheets setup
+# Google Sheets credentials from file instead of ENV variable
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-credentials = service_account.Credentials.from_service_account_info(creds_dict, scopes=scope)
+credentials = service_account.Credentials.from_service_account_file("google-credentials.json", scopes=scope)
+
+# Connect to Google Sheet
 gc = gspread.authorize(credentials)
-sheet = gc.open(SPREADSHEET_NAME).sheet1
+sh = gc.open(SPREADSHEET_NAME)
+worksheet = sh.sheet1
 
-HEADERS = [
-    "Affiliate Name (telegram group name)",
-    "Geo",
-    "CPA",
-    "CG%",
-    "Funnels",
-    "source type",
-    "quantity of leads aff can send",
-    "comments",
-    "last update date"
-]
-if sheet.row_count == 0 or sheet.row_values(1) != HEADERS:
-    sheet.resize(1)
-    sheet.append_row(HEADERS)
+# Start bot
+bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
-def extract_deals_from_text(text, group_name):
-    deals = []
-    lines = text.splitlines()
-    for i, line in enumerate(lines):
-        if re.search(r"\b[A-Z]{2}\b", line) or re.search(r"\ud83c", line):
-            country_codes = re.findall(r"\b[A-Z]{2}\b", line)
-            country_codes = [c for c in country_codes if c.upper() != "CR"]
-            if not country_codes:
-                continue
-            funnel = line.split("—")[-1].strip() if "—" in line else line.strip()
-            price_line = next((l for l in lines[i:i+4] if "price" in l.lower()), "")
-            cpa = extract_price(price_line)
-            cg = extract_percent(price_line)
-            comment = "GEOs: " + ", ".join(country_codes) if len(country_codes) > 1 else ""
-            for code in country_codes:
-                deals.append([
-                    group_name,
-                    code,
-                    cpa,
-                    cg,
-                    funnel,
-                    "",
-                    extract_cap(text),
-                    comment,
-                    datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                ])
-    return deals
+# Helper functions to extract values
+def extract_price(text):
+    import re
+    match = re.search(r'\$?(\d+(?:\.\d{1,2})?)', text)
+    return float(match.group(1)) if match else None
 
-def extract_price(line):
-    match = re.search(r"PRICE[:\s]+(\d{2,5})\$", line)
-    return int(match.group(1)) if match else ""
-
-def extract_percent(line):
-    match = re.search(r"\+(\d{1,2})%", line)
-    return int(match.group(1)) / 100 if match else ""
+def extract_percent(text):
+    import re
+    match = re.search(r'(\d{1,2}(?:\.\d{1,2})?)\s*%', text)
+    return float(match.group(1)) if match else None
 
 def extract_cap(text):
-    cap_match = re.search(r"cap(?:acity)?[\s:]*([\d]{1,5})", text, re.IGNORECASE)
-    return cap_match.group(1) if cap_match else ""
+    import re
+    match = re.search(r'Cap\s*:?\s*(\d+)', text, re.IGNORECASE)
+    return int(match.group(1)) if match else None
 
-@bot.message_handler(func=lambda m: True)
+def extract_deals_from_text(text, group_name):
+    geo = None
+    cpa = None
+    cg_percent = None
+    funnel = None
+    cap = None
+
+    lines = text.split('\n')
+    for line in lines:
+        if not geo and len(line.strip()) in [2, 3]:
+            geo = line.strip().upper()
+        if 'CPA' in line.upper() or '$' in line:
+            cpa = extract_price(line)
+        if '%' in line:
+            cg_percent = extract_percent(line)
+        if 'funnel' in line.lower() or 'traffic' in line.lower():
+            funnel = line.strip()
+        if 'cap' in line.lower():
+            cap = extract_cap(line)
+
+    return {
+        'Affiliate Name': group_name,
+        'Geo': geo,
+        'CPA': cpa,
+        'CG%': cg_percent,
+        'Funnels': funnel,
+        'Source Type': '',
+        'Quantity': cap,
+        'Comments': '',
+        'Last Update': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+
+# Ensure headers exist
+headers = ['Affiliate Name', 'Geo', 'CPA', 'CG%', 'Funnels', 'Source Type', 'Quantity', 'Comments', 'Last Update']
+if worksheet.row_values(1) != headers:
+    worksheet.insert_row(headers, index=1)
+
+@bot.message_handler(func=lambda message: True)
 def handle_message(message):
-    text = message.text
-    group_name = message.chat.title or message.chat.username or message.chat.first_name or "unknown"
-    deals = extract_deals_from_text(text, group_name)
-    for deal in deals:
-        sheet.append_row(deal)
-    print(f"✅ Saved {len(deals)} deal(s)")
+    group_name = message.chat.title or message.chat.username or "Unknown"
+    deal_data = extract_deals_from_text(message.text, group_name)
+    row = [deal_data[h] for h in headers]
+    worksheet.append_row(row)
+    print(f"✅ New deal added from {group_name}")
 
 print("🤖 Bot is running... waiting for messages.")
-bot.infinity_polling()
+bot.polling()
