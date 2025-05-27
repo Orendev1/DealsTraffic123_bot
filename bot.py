@@ -10,15 +10,16 @@ from google.oauth2 import service_account
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 SPREADSHEET_NAME = os.getenv("SPREADSHEET_NAME")
 
-# === Load Google Credentials from ENV ===
+# === Setup Google Sheets ===
 scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-google_creds = os.getenv("GOOGLE_CREDENTIALS_JSON")
 
-if not google_creds:
-    raise ValueError("Missing GOOGLE_CREDENTIALS_JSON environment variable")
+def load_credentials():
+    raw_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
+    if not raw_json:
+        raise ValueError("Missing GOOGLE_CREDENTIALS_JSON environment variable")
+    return service_account.Credentials.from_service_account_info(json.loads(raw_json), scopes=scope)
 
-service_account_info = json.loads(google_creds)
-credentials = service_account.Credentials.from_service_account_info(service_account_info, scopes=scope)
+credentials = load_credentials()
 gc = gspread.authorize(credentials)
 sheet = gc.open(SPREADSHEET_NAME).sheet1
 
