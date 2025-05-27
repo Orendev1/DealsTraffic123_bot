@@ -26,7 +26,7 @@ bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
 # === Patterns ===
 GEO_PATTERN = re.compile(r"(?<!\w)([A-Z]{2}|GCC|LATAM|ASIA|NORDICS)(?=\s|:|\n)")
-CPA_PATTERN = re.compile(r"\bCPA[:\s\-]*\$?(\d{2,5})\b", re.IGNORECASE)
+CPA_PATTERN = re.compile(r"CPA[:\s\-]*\$?(\d{2,5})", re.IGNORECASE)
 CRG_PATTERN = re.compile(r"\+?\s*(\d{1,2})%\s*(?:CR|CRG|Conv|Conversion Guarantee)?", re.IGNORECASE)
 FUNNEL_PATTERN = re.compile(r"Funnels?:\s*(.+?)(?=\n|Source|Traffic|Cap|\Z)", re.IGNORECASE | re.DOTALL)
 SOURCE_PATTERN = re.compile(r"(?:Source|Traffic):\s*([\w/\-+ ]+)", re.IGNORECASE)
@@ -58,7 +58,7 @@ def handle_message(message):
 def extract_deals(text):
     geos = GEO_PATTERN.findall(text)
     if not geos:
-        return []
+        return [{"geo": "", "raw_message": text}]
 
     deals = []
     for geo in geos:
