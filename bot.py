@@ -4,7 +4,13 @@ import re
 import gspread
 from google.oauth2.service_account import Credentials
 from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
+from telegram.ext import (
+    ApplicationBuilder,
+    MessageHandler,
+    filters,
+    ContextTypes
+)
+from telegram.request import HTTPXRequest
 from parser import parse_deals
 
 # Load keywords from JSON
@@ -12,7 +18,7 @@ def load_keywords(file_path='keywords.json'):
     with open(file_path, 'r', encoding='utf-8') as f:
         return json.load(f)
 
-# Determine if a message qualifies as a deal based on keyword categories
+# Determine if a message qualifies as a deal
 def is_deal_message(text, keywords):
     text_lower = text.lower()
     matched_categories = set()
@@ -23,7 +29,7 @@ def is_deal_message(text, keywords):
                 break
     return len(matched_categories) >= 2
 
-# Setup Google Sheets using correct scopes
+# Setup Google Sheets
 def setup_google_sheets():
     json_creds = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
     if not json_creds:
@@ -36,7 +42,7 @@ def setup_google_sheets():
     sheet = client.open("Telegram Bot Deals").sheet1
     return sheet
 
-# Handle incoming messages
+# Handle messages
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     if not text:
@@ -73,7 +79,10 @@ def main():
     if not token:
         raise ValueError("Missing TELEGRAM_BOT_TOKEN environment variable")
 
-    app = ApplicationBuilder().token(token).build()
+    # Add timeout handling for stability
+    request = HTTPXRequest(read_timeout=10, write_timeout=10, connect_timeout=5)
+
+    app = ApplicationBuilder().token(token).request(request).build()
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.run_polling()
 
