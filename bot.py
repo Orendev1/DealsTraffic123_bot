@@ -35,7 +35,7 @@ def setup_google_sheets():
     sheet = client.open("Telegram Bot Deals").sheet1
     return sheet
 
-# Handle messages
+# Handle incoming messages
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     if not text:
@@ -68,9 +68,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Start the bot
 def main():
-    token = os.getenv("BOT_TOKEN")
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
     if not token:
-        raise ValueError("Missing BOT_TOKEN environment variable")
+        raise ValueError("Missing TELEGRAM_BOT_TOKEN environment variable")
 
     app = ApplicationBuilder().token(token).build()
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
