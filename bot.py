@@ -26,7 +26,7 @@ bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
 # === Patterns ===
 GEO_PATTERN = re.compile(r"(?<!\w)([A-Z]{2}|GCC|LATAM|ASIA|NORDICS)(?=\s|:|\n)")
-CPA_PATTERN = re.compile(r"CPA[:\s\-]*\$?(\d{2,5})", re.IGNORECASE)
+CPA_PATTERN = re.compile(r"(?:\$?)(\d{2,5})(?:\s*CPL|\s*CPA)?", re.IGNORECASE)
 CRG_PATTERN = re.compile(r"\+?\s*(\d{1,2})%\s*(?:CR|CRG|Conv|Conversion Guarantee)?", re.IGNORECASE)
 FUNNEL_PATTERN = re.compile(r"Funnels?:\s*(.+?)(?=\n|Source|Traffic|Cap|\Z)", re.IGNORECASE | re.DOTALL)
 SOURCE_PATTERN = re.compile(r"(?:Source|Traffic):\s*([\w/\-+ ]+)", re.IGNORECASE)
@@ -53,7 +53,8 @@ def handle_message(message):
             deal.get("tag", "")
         ]
         sheet.append_row(row, value_input_option="USER_ENTERED")
-        bot.reply_to(message, "✅ Saved!")
+        # Silent mode: no reply to chat
+
 
 def extract_deals(text):
     matches = list(GEO_PATTERN.finditer(text))
