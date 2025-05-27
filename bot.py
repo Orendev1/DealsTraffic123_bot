@@ -11,9 +11,9 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 SPREADSHEET_NAME = os.getenv("SPREADSHEET_NAME")
 
 # === Setup Google Sheets ===
-json_creds = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+json_creds = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
 if not json_creds:
-    raise ValueError("Missing GOOGLE_APPLICATION_CREDENTIALS environment variable")
+    raise ValueError("Missing GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable")
 
 service_account_info = json.loads(json_creds)
 scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
@@ -26,7 +26,7 @@ bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
 # === Patterns ===
 GEO_PATTERN = re.compile(r"(?<!\w)([A-Z]{2}|GCC|LATAM|ASIA|NORDICS)(?=\s|:|\n)")
-CPA_PATTERN = re.compile(r"(?:\$|USD)?(\d{2,5})(?!%)")
+CPA_PATTERN = re.compile(r"(?:\bCPA\b[:\s]*)?(?:\$|USD)?(\d{2,5})(?!%)")
 CRG_PATTERN = re.compile(r"(\d{1,2})%\s*(?:CR|CRG|Conv|Conversion Guarantee)?", re.IGNORECASE)
 FUNNEL_PATTERN = re.compile(r"Funnels?:\s*(.+?)(?=\n|Source|Traffic|Cap|\Z)", re.IGNORECASE | re.DOTALL)
 SOURCE_PATTERN = re.compile(r"(?:Source|Traffic):\s*([\w/\-+ ]+)", re.IGNORECASE)
@@ -50,7 +50,7 @@ def handle_message(message):
             deal.get("source", ""),
             deal.get("cap", ""),
             deal.get("tag", ""),
-            text
+            text  # Raw Message at the correct column
         ]
         sheet.append_row(row, value_input_option="USER_ENTERED")
         bot.reply_to(message, "✅ Saved!")
@@ -60,7 +60,7 @@ def extract_deals(text):
     deals = []
     for geo in geos:
         deal = {"geo": geo, "tag": ""}
-        block_pattern = re.compile(rf"{geo}[^\n]*((?:\n.*?)*?)(?=\n[A-Z]{{2}}|\Z)", re.IGNORECASE)
+        block_pattern = re.compile(rf"{geo}[^\n]*((?:\n.*?)*?)(?=\n[A-Z]{{2}}|\nGCC|\nLATAM|\nASIA|\nNORDICS|\Z)", re.IGNORECASE)
         block_match = block_pattern.search(text)
         if block_match:
             block = f"{geo}{block_match.group(1)}".strip()
@@ -78,7 +78,8 @@ def extract_deals(text):
             if crg_match:
                 deal["crg"] = int(crg_match.group(1))
             if funnel_match:
-                deal["funnels"] = ", ".join([f.strip() for f in funnel_match.group(1).split(",")])
+                cleaned = funnel_match.group(1).replace("\n", ", ")
+                deal["funnels"] = ", ".join([f.strip() for f in cleaned.split(",") if f.strip()])
             if source_match:
                 deal["source"] = source_match.group(1).strip()
             if cap_match:
