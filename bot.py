@@ -31,7 +31,7 @@ CRG_PATTERN = re.compile(r"\+?\s*(\d{1,2})%\s*(?:CR|CRG|Conv|Conversion Guarante
 FUNNEL_PATTERN = re.compile(r"Funnels?:\s*(.+?)(?=\n|Source|Traffic|Cap|\Z)", re.IGNORECASE | re.DOTALL)
 SOURCE_PATTERN = re.compile(r"(?:Source|Traffic):\s*([\w/\-+ ]+)", re.IGNORECASE)
 CAP_PATTERN = re.compile(r"Cap[:\s]+(\d{1,4})", re.IGNORECASE)
-NEGOTIATION_PATTERN = re.compile(r"\b(?:can we do|negotiate|instead|work on|maybe)\b", re.IGNORECASE)
+NEGOTIATION_PATTERN = re.compile(r"\b(?:can we do|negotiate|instead|work on|maybe|can you reduce|let's make it)\b", re.IGNORECASE)
 
 # === Message Handling ===
 @bot.message_handler(func=lambda message: True)
@@ -56,44 +56,37 @@ def handle_message(message):
         bot.reply_to(message, "✅ Saved!")
 
 def extract_deals(text):
-    geos = GEO_PATTERN.findall(text)
-    if not geos:
+    matches = list(GEO_PATTERN.finditer(text))
+    if not matches:
         return [{"geo": "", "raw_message": text}]
 
     deals = []
-    for geo in geos:
-        deal = {"geo": geo, "tag": ""}
-        block_pattern = re.compile(rf"{geo}[^\n]*((?:\n.*?)*?)(?=\n[A-Z]{{2}}|\nGCC|\nLATAM|\nASIA|\nNORDICS|\Z)", re.IGNORECASE)
-        block_match = block_pattern.search(text)
-        if block_match:
-            block = f"{geo}{block_match.group(1)}".strip()
-        else:
-            block = text.strip()
+    for i, match in enumerate(matches):
+        geo = match.group(1)
+        start = match.start()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        block = text[start:end].strip()
 
-        deal["raw_message"] = block
+        deal = {
+            "geo": geo,
+            "raw_message": block,
+            "tag": "Negotiation" if NEGOTIATION_PATTERN.search(block) else ""
+        }
 
-        if NEGOTIATION_PATTERN.search(block):
-            deal["tag"] = "Negotiation"
-
-        cpa_match = CPA_PATTERN.search(block)
-        crg_match = CRG_PATTERN.search(block)
-        funnel_match = FUNNEL_PATTERN.search(block)
-        source_match = SOURCE_PATTERN.search(block)
-        cap_match = CAP_PATTERN.search(block)
-
-        if cpa_match:
-            deal["cpa"] = int(cpa_match.group(1))
-        if crg_match:
-            deal["crg"] = int(crg_match.group(1))
-        if funnel_match:
-            cleaned = funnel_match.group(1).replace("\n", ", ")
+        if (m := CPA_PATTERN.search(block)):
+            deal["cpa"] = int(m.group(1))
+        if (m := CRG_PATTERN.search(block)):
+            deal["crg"] = int(m.group(1))
+        if (m := FUNNEL_PATTERN.search(block)):
+            cleaned = m.group(1).replace("\n", ", ")
             deal["funnels"] = ", ".join([f.strip() for f in cleaned.split(",") if f.strip()])
-        if source_match:
-            deal["source"] = source_match.group(1).strip()
-        if cap_match:
-            deal["cap"] = int(cap_match.group(1))
+        if (m := SOURCE_PATTERN.search(block)):
+            deal["source"] = m.group(1).strip()
+        if (m := CAP_PATTERN.search(block)):
+            deal["cap"] = int(m.group(1))
 
         deals.append(deal)
+
     return deals
 
 # === Start Bot ===
