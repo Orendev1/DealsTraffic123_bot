@@ -23,14 +23,15 @@ def is_deal_message(text, keywords):
                 break
     return len(matched_categories) >= 2
 
-# Setup Google Sheets using modern google-auth
+# Setup Google Sheets using correct scopes
 def setup_google_sheets():
     json_creds = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
     if not json_creds:
         raise ValueError("Missing GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable")
 
     service_account_info = json.loads(json_creds)
-    creds = Credentials.from_service_account_info(service_account_info)
+    scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    creds = Credentials.from_service_account_info(service_account_info, scopes=scopes)
     client = gspread.authorize(creds)
     sheet = client.open("Telegram Bot Deals").sheet1
     return sheet
