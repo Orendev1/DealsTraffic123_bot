@@ -1,0 +1,64 @@
+{
+  "geo": [
+    "uk",
+    "united kingdom",
+    "gb",
+    "britain",
+    "de",
+    "germany",
+    "es",
+    "spain",
+    "fr",
+    "france",
+    "ca",
+    "canada",
+    "us",
+    "usa",
+    "united states",
+    "latam",
+    "gcc",
+    "il",
+    "israel"
+  ],
+  "deal_types": [
+    "cpa",
+    "cpl",
+    "crg",
+    "flat"
+  ],
+  "pricing": [
+    "$",
+    "%",
+    "+"
+  ],
+  "funnels": [
+    "funnels",
+    "funnel"
+  ],
+  "sources": [
+    "seo",
+    "ppc",
+    "native",
+    "taboola",
+    "google",
+    "facebook",
+    "youtube",
+    "tiktok",
+    "reddit",
+    "push",
+    "display",
+    "search",
+    "email",
+    "influencer",
+    "content",
+    "media buy"
+  ],
+  "general": [
+    "deal",
+    "cap",
+    "leads",
+    "offer",
+    "traffic",
+    "conversion"
+  ]
+}
