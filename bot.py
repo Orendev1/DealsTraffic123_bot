@@ -49,8 +49,8 @@ def handle_message(message):
             deal.get("funnels", ""),
             deal.get("source", ""),
             deal.get("cap", ""),
-            deal.get("tag", ""),
-            deal.get("raw_message", text)
+            deal.get("raw_message", text),
+            deal.get("tag", "")
         ]
         sheet.append_row(row, value_input_option="USER_ENTERED")
         bot.reply_to(message, "✅ Saved!")
