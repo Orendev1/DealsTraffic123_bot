@@ -11,7 +11,11 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 SPREADSHEET_NAME = os.getenv("SPREADSHEET_NAME")
 
 # === Setup Google Sheets ===
-service_account_info = json.loads(os.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
+json_creds = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+if not json_creds:
+    raise ValueError("Missing GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable")
+
+service_account_info = json.loads(json_creds)
 scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 credentials = service_account.Credentials.from_service_account_info(service_account_info, scopes=scope)
 gc = gspread.authorize(credentials)
@@ -44,8 +48,8 @@ def handle_message(message):
             deal.get("funnels", ""),
             deal.get("source", ""),
             deal.get("cap", ""),
-            text,
-            deal.get("tag", "")
+            deal.get("tag", ""),
+            text
         ]
         sheet.append_row(row, value_input_option="USER_ENTERED")
         bot.reply_to(message, "✅ Saved!")
@@ -61,7 +65,7 @@ def extract_deals(text):
             block = f"{geo}{block_match.group(1)}".strip()
             if any(word in block.lower() for word in ["negotiate", "instead", "can we do"]):
                 deal["tag"] = "Negotiation"
-            
+
             cpa_match = CPA_PATTERN.search(block)
             crg_match = CRG_PATTERN.search(block)
             funnel_match = FUNNEL_PATTERN.search(block)
