@@ -1,101 +1,83 @@
 import os
 import re
-import json
+import datetime
 import telebot
 import gspread
-from datetime import datetime
 from google.oauth2 import service_account
 
-# === ENV VARIABLES ===
+# Load environment variables
 SPREADSHEET_NAME = os.getenv("SPREADSHEET_NAME")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
-# === GOOGLE SHEETS AUTH ===
-creds_json = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
-creds_dict = json.loads(creds_json)
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-credentials = service_account.Credentials.from_service_account_info(creds_dict, scopes=scope)
+# Google Sheets authentication
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/spreadsheets",
+         "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
+
+credentials = service_account.Credentials.from_service_account_file(
+    "credentials/google-credentials.json", scopes=scope
+)
 gc = gspread.authorize(credentials)
 worksheet = gc.open(SPREADSHEET_NAME).sheet1
 
-# === TELEGRAM BOT ===
+# Initialize bot
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
-# === REGEX PATTERNS ===
-DOLLAR_PATTERN = re.compile(r'(\$?\d{2,5})')
-PERCENT_PATTERN = re.compile(r'(\d{1,2})\s*%')
-CPA_CRG_PATTERN = re.compile(r'(\$?\d{2,5})\s*\+\s*(\d{1,2})%')
+# Pattern definitions
+GEO_PATTERN = re.compile(r"(?<=\n|\s|^)([A-Z]{2}|GCC|LATAM|ASIA|NORDICS)(?=\s|:|$)", re.IGNORECASE)
+CPA_PATTERN = re.compile(r"\b(?:CPA|CPL|FLAT)?\s*[:=]?\s*\$?(\d{2,5})(?:\s*\+\s*(\d{1,2})%?)?", re.IGNORECASE)
+CRG_PATTERN = re.compile(r"CR(?:G)?[:=]?\s*(\d{1,2})%", re.IGNORECASE)
+FUNNEL_PATTERN = re.compile(r"Funnels?:?\s*(.*?)(?:\n|$)", re.IGNORECASE)
+SOURCE_PATTERN = re.compile(r"Source:?\s*(SEO|PPC|YouTube|Facebook|Google|Native|Taboola|Search)", re.IGNORECASE)
+CAP_PATTERN = re.compile(r"Cap:?\s*(\d{1,4})", re.IGNORECASE)
 
-# === HELPERS ===
-def parse_message_block(block, sender, raw_message):
-    geo_match = re.match(r'^([A-Z]{2}|GCC|LATAM|ASIA|NORDICS)', block.strip(), re.IGNORECASE)
-    geo = geo_match.group(1).upper() if geo_match else None
-
-    cpa = None
-    crg = None
-
-    if match := CPA_CRG_PATTERN.search(block):
-        cpa = int(re.sub(r'\D', '', match.group(1)))
-        crg = int(match.group(2))
-    elif match := DOLLAR_PATTERN.search(block):
-        cpa = int(re.sub(r'\D', '', match.group(1)))
-
-    if not crg and (match := PERCENT_PATTERN.search(block)):
-        crg = int(match.group(1))
-
-    funnels = ', '.join(re.findall(r'(Immediate\w+|Bitcoin\w+|Trader\w+|GPT\w+|Btc\w+|https?://\S+|\b[A-Z][a-zA-Z]+AI\b)', block)) or ''
-
-    source_match = re.search(r'(SEO|PPC|YouTube|Facebook|Google|Native|Search|Taboola|Unity Ads)', block, re.IGNORECASE)
-    source = source_match.group(0).title() if source_match else ''
-
-    cap_match = re.search(r'(\d{1,4})\s*(caps|leads|cap)', block, re.IGNORECASE)
-    cap = int(cap_match.group(1)) if cap_match else None
-
-    return {
-        'Date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'Affiliate Name': sender,
-        'Geo': geo,
-        'CPA': cpa,
-        'CG%': crg,
-        'Funnels': funnels,
-        'Source Type': source,
-        'Quantity': cap,
-        'Comments': '',
-        'Raw Message': raw_message.strip()
-    }
-
-def extract_deals_from_text(text, sender):
-    deals = []
-    lines = text.splitlines()
-    current_block = ""
-    for line in lines:
-        if re.match(r'^([A-Z]{2}|GCC|LATAM|ASIA|NORDICS)\b', line.strip(), re.IGNORECASE):
-            if current_block:
-                deal = parse_message_block(current_block, sender, text)
-                if deal['Geo']:
-                    deals.append(deal)
-            current_block = line
-        else:
-            current_block += "\n" + line
-    if current_block:
-        deal = parse_message_block(current_block, sender, text)
-        if deal['Geo']:
-            deals.append(deal)
-    return deals
-
-# === HANDLE MESSAGES ===
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
-    sender = message.chat.title or message.chat.username or 'Unknown'
-    print(f"📩 Message from {sender}: {message.text[:60]}...")
+    text = message.text
+    sender = message.from_user.username or message.from_user.first_name or "Unknown"
+    date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    deals = extract_deals_from_text(message.text, sender)
-    print(f"🔍 Parsed {len(deals)} deals")
+    geo_blocks = re.split(r"(?=\b[A-Z]{2}\b|\bGCC\b|\bLATAM\b|\bASIA\b|\bNORDICS\b)", text)
+    for block in geo_blocks:
+        geo_match = GEO_PATTERN.search(block)
+        if not geo_match:
+            continue
 
-    for deal in deals:
-        row = [deal[h] for h in ['Date', 'Affiliate Name', 'Geo', 'CPA', 'CG%', 'Funnels', 'Source Type', 'Quantity', 'Comments', 'Raw Message']]
+        geo = geo_match.group(1).upper()
+        cpa = ""
+        crg = ""
+        funnels = ""
+        source = ""
+        cap = ""
+        raw = block.strip()
+
+        cpa_match = CPA_PATTERN.search(block)
+        if cpa_match:
+            amount = cpa_match.group(1)
+            crg_bonus = cpa_match.group(2)
+            cpa = f"${amount}"
+            if crg_bonus:
+                crg = f"{crg_bonus}%"
+
+        crg_match = CRG_PATTERN.search(block)
+        if crg_match:
+            crg = f"{crg_match.group(1)}%"
+
+        funnel_match = FUNNEL_PATTERN.search(block)
+        if funnel_match:
+            funnels = funnel_match.group(1).strip()
+
+        source_match = SOURCE_PATTERN.search(block)
+        if source_match:
+            source = source_match.group(1)
+
+        cap_match = CAP_PATTERN.search(block)
+        if cap_match:
+            cap = cap_match.group(1)
+
+        row = [date, sender, geo, cpa, crg, funnels, source, cap, raw]
         worksheet.append_row(row)
-        print(f"✅ Row written: {deal['Geo']}")
 
-print("🤖 Bot is running... waiting for messages.")
-bot.polling()
+        bot.reply_to(message, "✅ Saved!")
+
+# Start polling
+bot.polling(non_stop=True)
