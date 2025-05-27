@@ -1,4 +1,7 @@
+from zipfile import ZipFile
 
+# Corrected version without lookbehind regex
+corrected_bot_py = '''
 import os
 import re
 import json
@@ -22,35 +25,34 @@ worksheet = gc.open(SPREADSHEET_NAME).sheet1
 # === TELEGRAM BOT ===
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
-# === GEO & REGION PATTERNS ===
-GEO_PATTERN = re.compile(r'(?<=\n|^)([A-Z]{2}|GCC|LATAM|ASIA|NORDICS)(?=\s|:|\n)', re.IGNORECASE)
-DOLLAR_PATTERN = re.compile(r'(\$?\d{2,5})')
-PERCENT_PATTERN = re.compile(r'(\d{1,2})\s*%')
-CPA_CRG_PATTERN = re.compile(r'(\$?\d{2,5})\s*\+\s*(\d{1,2})%')
+# === REGEX PATTERNS ===
+DOLLAR_PATTERN = re.compile(r'(\\$?\\d{2,5})')
+PERCENT_PATTERN = re.compile(r'(\\d{1,2})\\s*%')
+CPA_CRG_PATTERN = re.compile(r'(\\$?\\d{2,5})\\s*\\+\\s*(\\d{1,2})%')
 
 # === HELPERS ===
 def parse_message_block(block, sender, raw_message):
-    geo_match = re.search(r'(?<=^|\n)([A-Z]{2}|GCC|LATAM|ASIA|NORDICS)', block, re.IGNORECASE)
+    geo_match = re.match(r'^([A-Z]{2}|GCC|LATAM|ASIA|NORDICS)', block.strip(), re.IGNORECASE)
     geo = geo_match.group(1).upper() if geo_match else None
 
     cpa = None
     crg = None
 
     if match := CPA_CRG_PATTERN.search(block):
-        cpa = int(re.sub(r'\D', '', match.group(1)))
+        cpa = int(re.sub(r'\\D', '', match.group(1)))
         crg = int(match.group(2))
     elif match := DOLLAR_PATTERN.search(block):
-        cpa = int(re.sub(r'\D', '', match.group(1)))
+        cpa = int(re.sub(r'\\D', '', match.group(1)))
 
     if not crg and (match := PERCENT_PATTERN.search(block)):
         crg = int(match.group(1))
 
-    funnels = ', '.join(re.findall(r'(Immediate\w+|Bitcoin\w+|Trader\w+|GPT\w+|Btc\w+|https?://\S+|\b[A-Z][a-zA-Z]+AI\b)', block)) or ''
+    funnels = ', '.join(re.findall(r'(Immediate\\w+|Bitcoin\\w+|Trader\\w+|GPT\\w+|Btc\\w+|https?://\\S+|\\b[A-Z][a-zA-Z]+AI\\b)', block)) or ''
 
     source_match = re.search(r'(SEO|PPC|YouTube|Facebook|Google|Native|Search|Taboola|Unity Ads)', block, re.IGNORECASE)
     source = source_match.group(0).title() if source_match else ''
 
-    cap_match = re.search(r'(\d{1,4})\s*(caps|leads|cap)', block, re.IGNORECASE)
+    cap_match = re.search(r'(\\d{1,4})\\s*(caps|leads|cap)', block, re.IGNORECASE)
     cap = int(cap_match.group(1)) if cap_match else None
 
     return {
@@ -68,12 +70,21 @@ def parse_message_block(block, sender, raw_message):
 
 def extract_deals_from_text(text, sender):
     deals = []
-    blocks = re.split(r'(?=\n?[A-Z]{2}\s|\n?GCC|LATAM|ASIA|NORDICS)', text)
-    for block in blocks:
-        if any(code in block.upper() for code in ['CPA', '$', '%', 'FUNNEL', 'SOURCE']):
-            deal = parse_message_block(block, sender, text)
-            if deal['Geo']:
-                deals.append(deal)
+    lines = text.splitlines()
+    current_block = ""
+    for line in lines:
+        if re.match(r'^([A-Z]{2}|GCC|LATAM|ASIA|NORDICS)\\b', line.strip(), re.IGNORECASE):
+            if current_block:
+                deal = parse_message_block(current_block, sender, text)
+                if deal['Geo']:
+                    deals.append(deal)
+            current_block = line
+        else:
+            current_block += "\\n" + line
+    if current_block:
+        deal = parse_message_block(current_block, sender, text)
+        if deal['Geo']:
+            deals.append(deal)
     return deals
 
 # === HANDLE MESSAGES ===
@@ -92,3 +103,11 @@ def handle_message(message):
 
 print("🤖 Bot is running... waiting for messages.")
 bot.polling()
+'''
+
+# Create the updated ZIP
+zip_path = "/mnt/data/bot-parser-fixed.zip"
+with ZipFile(zip_path, "w") as zipf:
+    zipf.writestr("bot.py", corrected_bot_py)
+
+zip_path
