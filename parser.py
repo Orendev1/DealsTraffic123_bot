@@ -1,80 +1,92 @@
-
 import re
 
-# רשימת GEO חוקיים בלבד
-VALID_GEOS = {
-    "UK", "DE", "ES", "FR", "IT", "PL", "CA", "US", "BR", "PH", "IN", "MY", "ZA", "CH", "AT",
-    "CZ", "NL", "IE", "FI", "NO", "DK", "SE", "AU", "TR", "JP", "TH", "GG", "CR", "BE", "GCC", "LATAM"
-}
+# דפוסים
+GEO_PATTERN = re.compile(r"(?<!\w)([A-Z]{2}|GCC|LATAM|ASIA|NORDICS)(?=\s|:|\n)", re.IGNORECASE)
+CPA_PATTERN = re.compile(r"CPA[:\s]*\$?(\d{2,5})", re.IGNORECASE)
+CRG_PATTERN = re.compile(r"\+?\s*(\d{1,2})%\s*(?:CR|CRG)?", re.IGNORECASE)
+CPL_PATTERN = re.compile(r"CPL[:\s]*\$?(\d{2,5})", re.IGNORECASE)
+FUNNEL_PATTERN = re.compile(r"Funnels?:\s*(.+?)(?=\n|Source|Traffic|Cap|\Z)", re.IGNORECASE | re.DOTALL)
+SOURCE_PATTERN = re.compile(r"(?:Source|Traffic):\s*([\w\s+/.-]+)", re.IGNORECASE)
+CAP_PATTERN = re.compile(r"Cap[:\s]+(\d{1,4})", re.IGNORECASE)
+CR_PATTERN = re.compile(r"CR[:\s]+(\d{1,2})", re.IGNORECASE)
 
-# מקורות טראפיק חוקיים
-TRAFFIC_SOURCES = [
-    "seo", "ppc", "native", "taboola", "google", "facebook", "fb", "youtube", "tiktok",
-    "reddit", "push", "display", "search", "email", "influencer", "content", "media buy", "outbrain"
-]
-
-def parse_deals(message):
+def parse_deals(text):
     deals = []
-    chunks = re.split(r'\n\s*\n|(?=\b[A-Z]{2,5}\b)', message.strip(), flags=re.MULTILINE)
+    text = text.strip()
 
-    for chunk in chunks:
-        deal = {
-            "GEO": None, "CPA": None, "CRG": None, "CPL": None,
-            "Deal Type": None, "Funnel": None, "Source": None, "Cap": None, "CR": None
-        }
+    # מצא את כל הופעות GEO
+    geo_matches = list(GEO_PATTERN.finditer(text))
 
-        lines = chunk.strip().split("\n")
-        content = " ".join(lines).lower()
+    # אם אין GEO בכלל – כל ההודעה תיחשב בלוק אחד
+    if not geo_matches:
+        blocks = [text]
+    else:
+        blocks = []
+        for i, match in enumerate(geo_matches):
+            start = match.start()
+            end = geo_matches[i + 1].start() if i + 1 < len(geo_matches) else len(text)
+            block = text[start:end].strip()
 
-        # GEO - חייב להיות ברשימה חוקית
-        for geo in VALID_GEOS:
-            if re.search(rf'\b{geo.lower()}\b', content):
-                deal["GEO"] = geo
-                break
+            # אם GEO מופיע לבד (כמו "UK\nCPA:..."), נאחד אותו עם מה שמתחת
+            if block.count('\n') <= 1 and len(block) <= 6 and i + 1 < len(geo_matches):
+                continue  # נדלג, כי הוא יאוחד בבא אחריו
 
-        # PRICE עם CRG
-        price_crg_match = re.search(r'(\$?\d{2,5}[,\d]*)\s*\+\s*(\d{1,2}(\.\d+)?%?)', content)
-        if price_crg_match:
-            deal["CPA"] = float(price_crg_match.group(1).replace(",", "").replace("$", ""))
-            deal["CRG"] = price_crg_match.group(2) if "%" in price_crg_match.group(2) else price_crg_match.group(2) + "%"
-            deal["Deal Type"] = "CPA + CRG"
-        else:
-            # רק מחיר בסיסי
-            price_match = re.search(r'(\$?\d{2,5}[,\d]*)', content)
-            if price_match:
-                deal["CPA"] = float(price_match.group(1).replace(",", "").replace("$", ""))
-                deal["Deal Type"] = "CPA"
+            blocks.append(block)
 
-        # CPL fallback
-        if "cpl" in content and not deal["CPL"]:
-            deal["CPL"] = deal["CPA"]
-            deal["CPA"] = None
-            deal["Deal Type"] = "CPL"
+    for block in blocks:
+        deal = {"raw_message": block}
 
-        # CR נפרד
-        cr_match = re.search(r'cr[:\s\-]*([\d\.\-\+%]+)', content)
-        if cr_match:
-            deal["CR"] = cr_match.group(1).strip()
+        # GEO
+        geo_match = GEO_PATTERN.search(block)
+        if geo_match:
+            deal["GEO"] = geo_match.group(1).upper()
 
-        # Funnel (כולל טקסט חופשי אחרי מילים נפוצות או פשוט כשיש ביטויים כמו ai/app/bank)
-        funnel_match = re.search(r'(funnels?:|mostly|apps?:?)?\s*[-:]?\s*([a-z0-9 ,\-/|]+(?:ai|app|bank|bot|matrix|edge|phantom|trader)[a-z0-9 ,\-/]*)', content)
-        if funnel_match:
-            deal["Funnel"] = funnel_match.group(2).strip(".,;:")
+        # CPA
+        cpa_match = CPA_PATTERN.search(block)
+        if cpa_match:
+            deal["CPA"] = int(cpa_match.group(1))
 
-        # Source - גם בלי המילה source
-        sources_found = [src for src in TRAFFIC_SOURCES if src in content]
-        if sources_found:
-            deal["Source"] = ", ".join(sorted(set(sources_found)))
+        # CRG
+        crg_match = CRG_PATTERN.search(block)
+        if crg_match:
+            deal["CRG"] = int(crg_match.group(1))
+
+        # CPL
+        cpl_match = CPL_PATTERN.search(block)
+        if cpl_match:
+            deal["CPL"] = int(cpl_match.group(1))
 
         # Cap
-        cap_match = re.search(r'cap[:\s]*([\d,\.]+)', content)
+        cap_match = CAP_PATTERN.search(block)
         if cap_match:
-            try:
-                deal["Cap"] = int(float(cap_match.group(1).replace(",", "")))
-            except:
-                pass
+            deal["Cap"] = int(cap_match.group(1))
 
-        if deal["GEO"] or deal["CPA"] or deal["Funnel"]:
-            deals.append(deal)
+        # CR
+        cr_match = CR_PATTERN.search(block)
+        if cr_match:
+            deal["CR"] = int(cr_match.group(1))
+
+        # Funnel
+        funnel_match = FUNNEL_PATTERN.search(block)
+        if funnel_match:
+            cleaned = funnel_match.group(1).replace("\n", ", ")
+            deal["Funnel"] = ", ".join([f.strip() for f in cleaned.split(",") if f.strip()])
+
+        # Source
+        source_match = SOURCE_PATTERN.search(block)
+        if source_match:
+            deal["Source"] = source_match.group(1).strip().lower()
+
+        # Deal Type
+        if "CPA" in block and "CRG" in block:
+            deal["Deal Type"] = "CPA + CRG"
+        elif "CPA" in block:
+            deal["Deal Type"] = "CPA"
+        elif "CPL" in block:
+            deal["Deal Type"] = "CPL"
+        elif "FLAT" in block.upper():
+            deal["Deal Type"] = "FLAT"
+
+        deals.append(deal)
 
     return deals
