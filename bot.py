@@ -26,7 +26,7 @@ bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
 # === Patterns ===
 GEO_PATTERN = re.compile(r"(?<!\w)([A-Z]{2}|GCC|LATAM|ASIA|NORDICS)(?=\s|:|\n)")
-CPA_PATTERN = re.compile(r"(?:\bCPA\b[:\s]*)?(?:\$|USD)?(\d{2,5})(?!%)")
+CPA_PATTERN = re.compile(r"\bCPA[:\s\-]*\$?(\d{2,5})\b", re.IGNORECASE)
 CRG_PATTERN = re.compile(r"(\d{1,2})%\s*(?:CR|CRG|Conv|Conversion Guarantee)?", re.IGNORECASE)
 FUNNEL_PATTERN = re.compile(r"Funnels?:\s*(.+?)(?=\n|Source|Traffic|Cap|\Z)", re.IGNORECASE | re.DOTALL)
 SOURCE_PATTERN = re.compile(r"(?:Source|Traffic):\s*([\w/\-+ ]+)", re.IGNORECASE)
@@ -50,7 +50,7 @@ def handle_message(message):
             deal.get("source", ""),
             deal.get("cap", ""),
             deal.get("tag", ""),
-            text  # Raw Message at the correct column
+            deal.get("raw_message", text)
         ]
         sheet.append_row(row, value_input_option="USER_ENTERED")
         bot.reply_to(message, "✅ Saved!")
@@ -64,6 +64,8 @@ def extract_deals(text):
         block_match = block_pattern.search(text)
         if block_match:
             block = f"{geo}{block_match.group(1)}".strip()
+            deal["raw_message"] = block
+
             if NEGOTIATION_PATTERN.search(block):
                 deal["tag"] = "Negotiation"
 
