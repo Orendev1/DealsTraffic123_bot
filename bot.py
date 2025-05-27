@@ -26,11 +26,12 @@ bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
 # === Patterns ===
 GEO_PATTERN = re.compile(r"(?<!\w)([A-Z]{2}|GCC|LATAM|ASIA|NORDICS)(?=\s|:|\n)")
-CPA_PATTERN = re.compile(r"\$?(\d{2,5})")
-CRG_PATTERN = re.compile(r"(\d{1,2})%\s*(?:CR|CRG)", re.IGNORECASE)
+CPA_PATTERN = re.compile(r"(?:\$|USD)?(\d{2,5})(?!%)")
+CRG_PATTERN = re.compile(r"(\d{1,2})%\s*(?:CR|CRG|Conv|Conversion Guarantee)?", re.IGNORECASE)
 FUNNEL_PATTERN = re.compile(r"Funnels?:\s*(.+?)(?=\n|Source|Traffic|Cap|\Z)", re.IGNORECASE | re.DOTALL)
-SOURCE_PATTERN = re.compile(r"(?:Source|Traffic):\s*(SEO|PPC|YouTube|Facebook|Google|Native|Search|Taboola|.*?)\b", re.IGNORECASE)
+SOURCE_PATTERN = re.compile(r"(?:Source|Traffic):\s*([\w/\-+ ]+)", re.IGNORECASE)
 CAP_PATTERN = re.compile(r"Cap[:\s]+(\d{1,4})", re.IGNORECASE)
+NEGOTIATION_PATTERN = re.compile(r"\b(?:can we do|negotiate|instead|work on|maybe)\b", re.IGNORECASE)
 
 # === Message Handling ===
 @bot.message_handler(func=lambda message: True)
@@ -59,11 +60,12 @@ def extract_deals(text):
     deals = []
     for geo in geos:
         deal = {"geo": geo, "tag": ""}
-        block_pattern = re.compile(rf"{geo}[^\n]*((?:\n.*?)*?)(?=\n[A-Z]{{2}}|\Z)", re.IGNORECASE)
+        block_pattern = re.compile(rf"{geo}[^
+]*((?:\n.*?)*?)(?=\n[A-Z]{{2}}|\Z)", re.IGNORECASE)
         block_match = block_pattern.search(text)
         if block_match:
             block = f"{geo}{block_match.group(1)}".strip()
-            if any(word in block.lower() for word in ["negotiate", "instead", "can we do"]):
+            if NEGOTIATION_PATTERN.search(block):
                 deal["tag"] = "Negotiation"
 
             cpa_match = CPA_PATTERN.search(block)
@@ -77,7 +79,7 @@ def extract_deals(text):
             if crg_match:
                 deal["crg"] = int(crg_match.group(1))
             if funnel_match:
-                deal["funnels"] = funnel_match.group(1).strip()
+                deal["funnels"] = ", ".join([f.strip() for f in funnel_match.group(1).split(",")])
             if source_match:
                 deal["source"] = source_match.group(1).strip()
             if cap_match:
