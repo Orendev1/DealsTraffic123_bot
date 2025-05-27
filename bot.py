@@ -10,16 +10,10 @@ from google.oauth2 import service_account
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 SPREADSHEET_NAME = os.getenv("SPREADSHEET_NAME")
 
-# === Setup Google Sheets ===
+# === Load credentials from GOOGLE_APPLICATION_CREDENTIALS env ===
+service_account_info = json.loads(os.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
 scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-
-def load_credentials():
-    raw_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
-    if not raw_json:
-        raise ValueError("Missing GOOGLE_CREDENTIALS_JSON environment variable")
-    return service_account.Credentials.from_service_account_info(json.loads(raw_json), scopes=scope)
-
-credentials = load_credentials()
+credentials = service_account.Credentials.from_service_account_info(service_account_info, scopes=scope)
 gc = gspread.authorize(credentials)
 sheet = gc.open(SPREADSHEET_NAME).sheet1
 
@@ -28,12 +22,11 @@ bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
 # === Patterns ===
 GEO_PATTERN = re.compile(r"(?<!\w)([A-Z]{2}|GCC|LATAM|ASIA|NORDICS)(?=\s|:|\n)")
-CPA_PATTERN = re.compile(r"\$?(\d{2,5})(?:\s*\+\s*\d{1,2}%\s*CRG)?")
+CPA_PATTERN = re.compile(r"\$?(\d{2,5})\s*(?:\+\s*\d{1,2}%\s*CRG)?")
 CRG_PATTERN = re.compile(r"(\d{1,2})%\s*(?:CR|CRG)", re.IGNORECASE)
-FUNNEL_PATTERN = re.compile(r"Funnels?:\s*(.+?)(?=\n|Source|Traffic|Cap|\Z)", re.IGNORECASE | re.DOTALL)
+FUNNEL_PATTERN = re.compile(r"Funnels?:\s*(.+?)(?=\n|Source|\Z)", re.IGNORECASE | re.DOTALL)
 SOURCE_PATTERN = re.compile(r"(?:Source|Traffic):\s*(SEO|PPC|YouTube|Facebook|Google|Native|Search|Taboola|.*?)\s*(?=\n|Cap|\Z)", re.IGNORECASE)
 CAP_PATTERN = re.compile(r"Cap[:\s]+(\d{1,4})", re.IGNORECASE)
-NEGOTIATION_PATTERN = re.compile(r"\b(can we|instead|negotiate|work on|do you agree|make it|could we|would you accept|we can offer|reduce|lower)\b", re.IGNORECASE)
 
 # === Message Handling ===
 @bot.message_handler(func=lambda message: True)
@@ -69,26 +62,19 @@ def extract_deals(text):
         if block_match:
             block = f"{geo}{block_match.group(1)}".strip()
             deal["raw_geo_block"] = block
-
-            if NEGOTIATION_PATTERN.search(block):
+            if any(phrase in block.lower() for phrase in ["negotiate", "instead", "can we do", "could we", "work on"]):
                 deal["tag"] = "Negotiation"
 
-            cpa_match = CPA_PATTERN.search(block)
-            crg_match = CRG_PATTERN.search(block)
-            funnel_match = FUNNEL_PATTERN.search(block)
-            source_match = SOURCE_PATTERN.search(block)
-            cap_match = CAP_PATTERN.search(block)
-
-            if cpa_match:
-                deal["cpa"] = int(cpa_match.group(1))
-            if crg_match:
-                deal["crg"] = int(crg_match.group(1))
-            if funnel_match:
-                deal["funnels"] = funnel_match.group(1).strip()
-            if source_match:
-                deal["source"] = source_match.group(1).strip()
-            if cap_match:
-                deal["cap"] = int(cap_match.group(1))
+            if match := CPA_PATTERN.search(block):
+                deal["cpa"] = int(match.group(1))
+            if match := CRG_PATTERN.search(block):
+                deal["crg"] = int(match.group(1))
+            if match := FUNNEL_PATTERN.search(block):
+                deal["funnels"] = match.group(1).strip()
+            if match := SOURCE_PATTERN.search(block):
+                deal["source"] = match.group(1).strip()
+            if match := CAP_PATTERN.search(block):
+                deal["cap"] = int(match.group(1))
 
             deals.append(deal)
 
