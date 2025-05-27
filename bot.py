@@ -1,6 +1,7 @@
 import telebot
 import os
 import re
+import json
 from datetime import datetime
 import gspread
 from google.oauth2 import service_account
@@ -11,7 +12,8 @@ SPREADSHEET_NAME = os.getenv("SPREADSHEET_NAME")
 
 # === Setup Google Sheets ===
 scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-credentials = service_account.Credentials.from_service_account_file("credentials/google-credentials.json", scopes=scope)
+service_account_info = json.loads(os.getenv("GOOGLE_CREDENTIALS_JSON"))
+credentials = service_account.Credentials.from_service_account_info(service_account_info, scopes=scope)
 gc = gspread.authorize(credentials)
 sheet = gc.open(SPREADSHEET_NAME).sheet1
 
@@ -20,16 +22,12 @@ bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
 # === Patterns ===
 GEO_PATTERN = re.compile(r"(?<!\w)([A-Z]{2}|GCC|LATAM|ASIA|NORDICS)(?=\s|:|\n)")
-CPA_PATTERN = re.compile(r"\$?(\d{2,5})\s*(?:\+\s*\d{1,2}%\s*CRG)?")
+CPA_PATTERN = re.compile(r"\$?(\d{2,5})(?:\s*\+\s*\d{1,2}%\s*CRG)?")
 CRG_PATTERN = re.compile(r"(\d{1,2})%\s*(?:CR|CRG)", re.IGNORECASE)
-FUNNEL_PATTERN = re.compile(r"Funnels?:\s*(.+?)(?=\n|Source|\Z)", re.IGNORECASE | re.DOTALL)
-SOURCE_PATTERN = re.compile(r"Source|Traffic:\s*(SEO|PPC|YouTube|Facebook|Google|Native|Search|Taboola|.*?)(?=\n|Cap|\Z)", re.IGNORECASE)
+FUNNEL_PATTERN = re.compile(r"Funnels?:\s*(.+?)(?=\n|Source|Traffic|Cap|\Z)", re.IGNORECASE | re.DOTALL)
+SOURCE_PATTERN = re.compile(r"(?:Source|Traffic):\s*(SEO|PPC|YouTube|Facebook|Google|Native|Search|Taboola|.*?)\s*(?=\n|Cap|\Z)", re.IGNORECASE)
 CAP_PATTERN = re.compile(r"Cap[:\s]+(\d{1,4})", re.IGNORECASE)
-
-NEGOTIATION_KEYWORDS = [
-    "can we do", "can we make it", "could we", "instead of", "let's do", "can work on",
-    "possible to do", "willing to do", "negotiate", "is it okay if", "maybe", "reduce", "lower"
-]
+NEGOTIATION_PATTERN = re.compile(r"\b(can we|instead|negotiate|work on|do you agree|make it|could we|would you accept|we can offer)\b", re.IGNORECASE)
 
 # === Message Handling ===
 @bot.message_handler(func=lambda message: True)
@@ -55,6 +53,8 @@ def handle_message(message):
         bot.reply_to(message, "✅ Saved!")
 
 def extract_deals(text):
+    lines = text.splitlines()
+    all_text = text.replace("\n", " ")
     geos = GEO_PATTERN.findall(text)
     deals = []
 
@@ -66,8 +66,7 @@ def extract_deals(text):
             block = f"{geo}{block_match.group(1)}".strip()
             deal["raw_geo_block"] = block
 
-            # Check for negotiation
-            if any(kw in block.lower() for kw in NEGOTIATION_KEYWORDS):
+            if NEGOTIATION_PATTERN.search(block):
                 deal["tag"] = "Negotiation"
 
             cpa_match = CPA_PATTERN.search(block)
