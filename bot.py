@@ -10,9 +10,14 @@ from google.oauth2 import service_account
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 SPREADSHEET_NAME = os.getenv("SPREADSHEET_NAME")
 
-# === Setup Google Sheets ===
+# === Load Google Credentials from ENV ===
 scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-service_account_info = json.loads(os.getenv("GOOGLE_CREDENTIALS_JSON"))
+google_creds = os.getenv("GOOGLE_CREDENTIALS_JSON")
+
+if not google_creds:
+    raise ValueError("Missing GOOGLE_CREDENTIALS_JSON environment variable")
+
+service_account_info = json.loads(google_creds)
 credentials = service_account.Credentials.from_service_account_info(service_account_info, scopes=scope)
 gc = gspread.authorize(credentials)
 sheet = gc.open(SPREADSHEET_NAME).sheet1
@@ -27,7 +32,7 @@ CRG_PATTERN = re.compile(r"(\d{1,2})%\s*(?:CR|CRG)", re.IGNORECASE)
 FUNNEL_PATTERN = re.compile(r"Funnels?:\s*(.+?)(?=\n|Source|Traffic|Cap|\Z)", re.IGNORECASE | re.DOTALL)
 SOURCE_PATTERN = re.compile(r"(?:Source|Traffic):\s*(SEO|PPC|YouTube|Facebook|Google|Native|Search|Taboola|.*?)\s*(?=\n|Cap|\Z)", re.IGNORECASE)
 CAP_PATTERN = re.compile(r"Cap[:\s]+(\d{1,4})", re.IGNORECASE)
-NEGOTIATION_PATTERN = re.compile(r"\b(can we|instead|negotiate|work on|do you agree|make it|could we|would you accept|we can offer)\b", re.IGNORECASE)
+NEGOTIATION_PATTERN = re.compile(r"\b(can we|instead|negotiate|work on|do you agree|make it|could we|would you accept|we can offer|reduce|lower)\b", re.IGNORECASE)
 
 # === Message Handling ===
 @bot.message_handler(func=lambda message: True)
@@ -53,8 +58,6 @@ def handle_message(message):
         bot.reply_to(message, "✅ Saved!")
 
 def extract_deals(text):
-    lines = text.splitlines()
-    all_text = text.replace("\n", " ")
     geos = GEO_PATTERN.findall(text)
     deals = []
 
