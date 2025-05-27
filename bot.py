@@ -10,8 +10,8 @@ from google.oauth2 import service_account
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 SPREADSHEET_NAME = os.getenv("SPREADSHEET_NAME")
 
-# === Load credentials from GOOGLE_APPLICATION_CREDENTIALS env ===
-service_account_info = json.loads(os.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
+# === Load Google Credentials from env var ===
+service_account_info = json.loads(os.getenv("GOOGLE_CREDENTIALS_JSON"))
 scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 credentials = service_account.Credentials.from_service_account_info(service_account_info, scopes=scope)
 gc = gspread.authorize(credentials)
