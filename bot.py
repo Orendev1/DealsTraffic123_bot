@@ -1,9 +1,8 @@
-
 import os
 import json
 import re
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
 from parser import parse_deals
@@ -24,10 +23,14 @@ def is_deal_message(text, keywords):
                 break
     return len(matched_categories) >= 2
 
-# Google Sheets setup
+# Setup Google Sheets using modern google-auth
 def setup_google_sheets():
-    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name('google-credentials.json', scope)
+    json_creds = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+    if not json_creds:
+        raise ValueError("Missing GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable")
+
+    service_account_info = json.loads(json_creds)
+    creds = Credentials.from_service_account_info(service_account_info)
     client = gspread.authorize(creds)
     sheet = client.open("Telegram Bot Deals").sheet1
     return sheet
@@ -61,4 +64,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 deal.get("CR"),
                 text  # raw message
             ]
-            context.application.sheet.append_row(row)
+            context.application.sheet.append_row(row, value_input_option="USER_ENTERED")
+
+# Start the bot
+def main():
+    token = os.getenv("BOT_TOKEN")
+    if not token:
+        raise ValueError("Missing BOT_TOKEN environment variable")
+
+    app = ApplicationBuilder().token(token).build()
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
