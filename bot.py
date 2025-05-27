@@ -6,20 +6,17 @@ import gspread
 from datetime import datetime
 from google.oauth2 import service_account
 
-# Load credentials from file
+# Use local credentials from subfolder
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-credentials = service_account.Credentials.from_service_account_file("google-credentials.json", scopes=scope)
+credentials = service_account.Credentials.from_service_account_file("credentials/google-credentials.json", scopes=scope)
 
-# Get environment variables
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 SPREADSHEET_NAME = os.getenv("SPREADSHEET_NAME")
 
-# Connect to Google Sheets
 gc = gspread.authorize(credentials)
 sh = gc.open(SPREADSHEET_NAME)
 worksheet = sh.sheet1
 
-# Start the Telegram bot
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
 headers = ['Affiliate Name', 'Geo', 'CPA', 'CG%', 'Funnels', 'Source Type', 'Quantity', 'Comments', 'Last Update']
