@@ -9,7 +9,7 @@ def parse_affiliate_message(message: str) -> List[Dict[str, str]]:
 
     for line in lines:
         line = line.strip()
-        
+
         # Detect GEO or country
         geo_match = re.match(r"^(\W{0,2}[A-Z]{2,3})(\s+[-:\u2013])?", line)
         if geo_match:
