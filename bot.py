@@ -9,6 +9,7 @@ from google.oauth2.service_account import Credentials
 from parser import parse_affiliate_message
 from datetime import datetime
 from flask import Flask, request
+import asyncio
 
 # --- Logging ---
 logging.basicConfig(level=logging.INFO)
@@ -65,19 +66,12 @@ def health():
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    update = Update.de_json(request.get_json(force=True), application.bot)
-
-    # פתרון נכון שמריץ את ההודעה מיד
-    async def process_update():
-        await application.process_update(update)
-
-    import asyncio
-    asyncio.create_task(process_update())
-
+    data = request.get_json(force=True)
+    update = Update.de_json(data, application.bot)
+    asyncio.get_event_loop().create_task(application.process_update(update))
     return "ok", 200
 
 if __name__ == "__main__":
-    import asyncio
     async def setup():
         await application.bot.delete_webhook()
         await application.bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
