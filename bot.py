@@ -39,6 +39,8 @@ gc = gspread.authorize(creds)
 sheet = gc.open(SPREADSHEET_NAME).sheet1
 
 # --- Telegram Logic ---
+application = ApplicationBuilder().token(BOT_TOKEN).build()
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message.text
     username = update.effective_user.username or update.effective_user.first_name or "Unknown"
@@ -58,10 +60,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         sheet.append_row(row)
 
-# --- Flask App + Webhook ---
-app = Flask(__name__)
-application = ApplicationBuilder().token(BOT_TOKEN).build()
 application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
+
+# --- Flask App ---
+app = Flask(__name__)
 
 @app.route("/", methods=["GET"])
 def health():
@@ -79,11 +81,7 @@ def webhook():
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
-        async def process():
-            await application.initialize()  # ← חובה לגרסאות PTB 20+
-            await application.process_update(update)
-
-        loop.run_until_complete(process())
+        loop.run_until_complete(application.process_update(update))
         loop.close()
 
         return "ok", 200
@@ -92,7 +90,13 @@ def webhook():
         logging.error("Error in webhook:\n" + traceback.format_exc())
         return "error", 500
 
-# --- Run Flask + Set Webhook ---
+# --- Run Flask and Initialize Bot ---
+async def setup_bot():
+    await application.initialize()
+    await application.bot.delete_webhook()
+    await application.bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
+    print("✅ Bot initialized and webhook set!")
+
 if __name__ == "__main__":
     def run_flask():
         print(f"🚀 Starting Flask server on port {PORT}...")
@@ -101,8 +105,4 @@ if __name__ == "__main__":
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.start()
 
-    async def setup():
-        await application.bot.delete_webhook()
-        await application.bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
-
-    asyncio.run(setup())
+    asyncio.run(setup_bot())
