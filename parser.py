@@ -2,63 +2,67 @@
 import re
 from typing import List, Dict
 
-GEO_CODES = {
-    "UK", "US", "DE", "FR", "IL", "AU", "CA", "NZ", "IN", "BR", "MX", "PL", "ES", "IT", "PT", "GR",
-    "JP", "NL", "IE", "AT", "CH", "SK", "CZ", "DK", "SE", "NO", "FI", "BE", "BE-NL", "BEFR", "BE-FR"
-}
+def clean_line(line: str) -> str:
+    # Remove emojis and special chars that break regex
+    return re.sub(r'[^\w\s:$+%.,/\-]', '', line)
 
 def parse_affiliate_message(message: str) -> List[Dict[str, str]]:
-    lines = [line.strip() for line in message.strip().splitlines() if line.strip()]
+    print("[DEBUG] Parsing message:", message)
+    lines = message.strip().splitlines()
     deals = []
     current_deal = {}
 
-    def flush_deal():
-        if current_deal.get("GEO") and current_deal.get("CPA"):
-            deals.append(current_deal.copy())
-
     for line in lines:
-        geo_match = re.match(r"^([A-Z]{2,4}(?:[-/][A-Z]{2,4})?)\\b", line)
+        line = clean_line(line.strip())
+        print("[DEBUG] Processing line:", line)
+
+        # Detect GEO (2–3 uppercase letters, or mixed like BE-fr)
+        geo_match = re.match(r"^([A-Z]{2,3}(?:[-/][a-z]{2,3})?)$", line, re.IGNORECASE)
         if geo_match:
-            geo = geo_match.group(1).upper()
-            if geo in GEO_CODES or "-" in geo or "/" in geo:
-                if current_deal:
-                    flush_deal()
-                    current_deal.clear()
-                current_deal["GEO"] = geo
-                continue
+            if current_deal:
+                deals.append(current_deal)
+                print("[DEBUG] Appending deal:", current_deal)
+                current_deal = {}
+            current_deal['GEO'] = geo_match.group(1).upper()
+            continue
 
-        price_match = re.search(r"(\\d{2,5})\\$?\\s*\\+\\s*(\\d{1,2}(?:\\.\\d{1,2})?)%?", line)
+        # Price formats: 1300 + 12% / 1300$ + 12.5%
+        price_match = re.search(r"(\d{2,5})\$?\s*\+\s*(\d{1,2}(?:\.\d{1,2})?)%?", line)
         if price_match:
-            current_deal["CPA"] = price_match.group(1)
-            current_deal["CRG"] = price_match.group(2)
+            current_deal['CPA'] = price_match.group(1)
+            current_deal['CRG'] = price_match.group(2)
             continue
 
-        cpa_match = re.match(r"(\\d{2,5})\\$?", line)
-        if cpa_match and "CPA" not in current_deal:
-            current_deal["CPA"] = cpa_match.group(1)
+        # Only CPA or CPL price (no CRG)
+        single_price = re.search(r"(CPA|CPL)?[:\s]*\$?(\d{2,5})", line, re.IGNORECASE)
+        if single_price:
+            if 'CPA' not in current_deal:
+                current_deal[single_price.group(1).upper() if single_price.group(1) else 'CPA'] = single_price.group(2)
             continue
 
-        if "funnels" in line.lower() or "mostly" in line.lower() or "mix of funnels" in line.lower():
-            funnels = line.split(":", 1)[-1].strip()
-            current_deal["Funnels"] = funnels
-            continue
-        elif re.search(r"(app|ai|crypto|trader|bank|software|nodeon|syntek|bitcoin|gainer|flux|invex)", line, re.I):
-            current_deal["Funnels"] = line.strip()
+        # Detect Funnel(s)
+        if 'funnels' in line.lower() or 'funnel' in line.lower() or 'mostly' in line.lower() or 'mix of funnels' in line.lower():
+            funnel_text = line.split(':', 1)[-1].strip()
+            current_deal['Funnels'] = funnel_text
             continue
 
-        if "source" in line.lower() or "traffic" in line.lower():
-            current_deal["Source"] = line.split(":", 1)[-1].strip()
+        # Source / Traffic
+        if 'source' in line.lower() or 'traffic' in line.lower():
+            current_deal['Source'] = line.split(':', 1)[-1].strip()
             continue
-        if re.match(r"^(FB|GG|SEO|PPC|Native|Taboola|Outbrain|BING)([+/\\sA-Za-z]*)$", line, re.I):
-            current_deal["Source"] = line.strip()
+        elif re.match(r'^(FB|GG|SEO|PPC|Native|Taboola|Outbrain|BING)([+/\\s]*\w+)*$', line, re.IGNORECASE):
+            current_deal['Source'] = line.strip()
             continue
 
-        if "cap" in line.lower():
-            cap_match = re.search(r"(\\d{1,4})\\s*(leads|cap)?", line, re.IGNORECASE)
-            if cap_match:
-                current_deal["Cap"] = cap_match.group(1)
+        # Cap
+        cap_match = re.search(r'cap[:\s]*([0-9]{1,5})', line, re.IGNORECASE)
+        if cap_match:
+            current_deal['Cap'] = cap_match.group(1)
+            continue
 
     if current_deal:
-        flush_deal()
+        deals.append(current_deal)
+        print("[DEBUG] Final appended deal:", current_deal)
 
+    print("[DEBUG] Parsed deals:", deals)
     return deals
