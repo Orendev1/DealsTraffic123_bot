@@ -19,7 +19,7 @@ logging.basicConfig(level=logging.INFO)
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 SPREADSHEET_NAME = "Telegram Bot Deals"
 CREDENTIALS_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # לדוגמה: https://your-bot.up.railway.app
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # למשל: https://your-bot.up.railway.app
 
 if not BOT_TOKEN:
     raise ValueError("Missing TELEGRAM_BOT_TOKEN in environment.")
@@ -56,7 +56,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         sheet.append_row(row)
 
-# --- Flask Web Server + Webhook ---
+# --- Flask App + Webhook ---
 app = Flask(__name__)
 application = ApplicationBuilder().token(BOT_TOKEN).build()
 application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
@@ -68,6 +68,7 @@ def health():
 @app.route("/webhook", methods=["POST"])
 def webhook():
     try:
+        logging.info("Webhook triggered!")  # DEBUG – לוודא שהבקשה הגיעה
         data = request.get_json(force=True)
         update = Update.de_json(data, application.bot)
 
@@ -81,7 +82,7 @@ def webhook():
         logging.error("Error in webhook:\n" + traceback.format_exc())
         return "error", 500
 
-# --- Set Webhook on start ---
+# --- Webhook setup on startup ---
 if __name__ == "__main__":
     async def setup():
         await application.bot.delete_webhook()
