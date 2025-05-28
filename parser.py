@@ -1,66 +1,67 @@
+# parser.py
 import re
 from typing import List, Dict
 
 def parse_affiliate_message(message: str) -> List[Dict[str, str]]:
+    print("[DEBUG] Parsing message:", message)
+    lines = message.strip().splitlines()
     deals = []
     current_deal = {}
 
-    lines = message.strip().splitlines()
-
     for line in lines:
         line = line.strip()
+        print("[DEBUG] Processing line:", line)
 
-        # GEO - new deal start
-        geo_match = re.match(r"^(?:[\W]*)?([A-Z]{2,3}(?:/[A-Z]{2,3})*)", line)
-        if geo_match and not re.search(r'\d', line):  # Avoid matching on lines like "1400+15%"
+        # Detect GEO or country
+        geo_match = re.match(r"^(\W{0,2}[A-Z]{2,3})(\s+[-:\u2013])?", line)
+        if geo_match:
             if current_deal:
                 deals.append(current_deal)
+                print("[DEBUG] Appending deal:", current_deal)
                 current_deal = {}
-            current_deal['GEO'] = geo_match.group(1)
+            current_deal['GEO'] = geo_match.group(1).strip("-: –")
             continue
 
-        # CPA/CRG
-        if re.search(r'\d{2,5}\s*\+[\s]*\d{1,2}%?', line):
-            cpa_crg = re.search(r'(\d{2,5})\s*\+[\s]*(\d{1,2})%?', line)
-            if cpa_crg:
-                current_deal['CPA'] = cpa_crg.group(1)
-                current_deal['CRG'] = cpa_crg.group(2)
-            continue
-        elif re.search(r'CPA\s*[:\-]?\s*\$?(\d{2,5})', line, re.I):
-            current_deal['CPA'] = re.search(r'CPA\s*[:\-]?\s*\$?(\d{2,5})', line, re.I).group(1)
-            crg_match = re.search(r'\+?\s*(\d{1,2})%?', line)
-            if crg_match:
-                current_deal['CRG'] = crg_match.group(1)
+        # Detect CPA or CPL
+        if 'CPA' in line.upper() or 'CPL' in line.upper():
+            price_match = re.search(r'(\d{2,5})\$?\s*\+?\s*(\d{1,2})?%?', line)
+            if price_match:
+                current_deal['CPA'] = price_match.group(1)
+                if price_match.group(2):
+                    current_deal['CRG'] = price_match.group(2)
             continue
 
-        # CPL
-        if re.search(r'CPL\s*[:\-]?\s*\$?(\d{2,5})', line, re.I):
-            current_deal['CPL'] = re.search(r'CPL\s*[:\-]?\s*\$?(\d{2,5})', line, re.I).group(1)
+        price_standalone = re.match(r'(\d{2,5})\$?\s*\+\s*(\d{1,2})%?', line)
+        if price_standalone and 'CPA' not in current_deal:
+            current_deal['CPA'] = price_standalone.group(1)
+            current_deal['CRG'] = price_standalone.group(2)
             continue
 
-        # Funnels
-        if 'funnels' in line.lower() or 'mostly:' in line.lower():
-            funnel = line.split(':', 1)[-1].strip()
-            current_deal['Funnels'] = funnel
+        # Detect Funnels
+        if 'funnels' in line.lower():
+            current_deal['Funnels'] = line.split(':', 1)[-1].strip()
+            continue
+        elif 'mostly:' in line.lower():
+            current_deal['Funnels'] = line.split(':', 1)[-1].strip()
             continue
 
-        # Source / Traffic
+        # Detect Source / Traffic
         if 'source' in line.lower() or 'traffic' in line.lower():
-            source = line.split(':', 1)[-1].strip()
-            current_deal['Source'] = source
+            current_deal['Source'] = line.split(':', 1)[-1].strip()
             continue
         elif re.match(r'^(FB|GG|SEO|PPC|Native|Taboola|Outbrain|BING)([+/\\s]*\w+)*$', line, re.I):
             current_deal['Source'] = line.strip()
             continue
 
-        # Cap
-        if 'cap' in line.lower() or 'leads' in line.lower():
-            cap = re.search(r'(\d{1,4})\s*(leads|cap)', line, re.I)
-            if cap:
-                current_deal['Cap'] = cap.group(1)
-                continue
+        # Detect Cap
+        if 'cap' in line.lower():
+            cap_match = re.search(r'(\d{1,4})\s*(leads|cap)', line, re.IGNORECASE)
+            if cap_match:
+                current_deal['Cap'] = cap_match.group(1)
 
     if current_deal:
         deals.append(current_deal)
+        print("[DEBUG] Final appended deal:", current_deal)
 
+    print("[DEBUG] Parsed deals:", deals)
     return deals
