@@ -68,7 +68,9 @@ def health():
 @app.route("/webhook", methods=["POST"])
 def webhook():
     try:
-        logging.info("Webhook triggered!")  # DEBUG – לוודא שהבקשה הגיעה
+        print("📥 Webhook triggered!")  # DEBUG - ידפיס ב-Logs
+        logging.info("Webhook triggered!")
+
         data = request.get_json(force=True)
         update = Update.de_json(data, application.bot)
 
@@ -79,10 +81,11 @@ def webhook():
 
         return "ok", 200
     except Exception:
+        print("❌ Webhook error!")
         logging.error("Error in webhook:\n" + traceback.format_exc())
         return "error", 500
 
-# --- Webhook setup on startup ---
+# --- Set Webhook on startup ---
 if __name__ == "__main__":
     async def setup():
         await application.bot.delete_webhook()
