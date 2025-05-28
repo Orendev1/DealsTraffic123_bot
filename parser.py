@@ -6,7 +6,7 @@ from typing import List, Dict
 GEO_KEYWORDS = [
     # ISO country codes
     'US', 'UK', 'DE', 'FR', 'IT', 'ES', 'PL', 'CA', 'AU', 'NL', 'IE', 'CH', 'BR', 'IN', 'SK', 'CZ', 'PT', 'GR', 'JP', 'BE', 'SE', 'FI', 'DK', 'NO', 'AT', 'GCC', 'LATAM', 'APAC', 'MENA', 'CIS', 'ROW', 'Balkan', 'Baltics', 'Nordics',
-    # Full country names (case-insensitive check later)
+    # Full country names
     'United States', 'United Kingdom', 'Germany', 'France', 'Italy', 'Spain', 'Poland', 'Canada', 'Australia', 'Netherlands', 'Ireland', 'Switzerland', 'Brazil', 'India', 'Slovakia', 'Czech Republic', 'Portugal', 'Greece', 'Japan', 'Belgium', 'Sweden', 'Finland', 'Denmark', 'Norway', 'Austria',
     # Regions
     'LATAM', 'GCC', 'APAC', 'EU', 'MENA', 'CIS', 'ROW', 'Balkan', 'Baltics', 'Nordics'
@@ -24,6 +24,10 @@ def is_relevant_message(message: str) -> bool:
 
 def parse_affiliate_message(message: str) -> List[Dict[str, str]]:
     print("[DEBUG] Parsing message:", message)
+    if not is_relevant_message(message):
+        print("[DEBUG] Message not relevant.")
+        return []
+
     lines = message.strip().splitlines()
     deals = []
     current_deal = {}
