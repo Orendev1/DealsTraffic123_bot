@@ -47,7 +47,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             deal.get("Funnels", ""),
             deal.get("Source", ""),
             deal.get("Cap", ""),
-            message[:500]  # Raw message preview (up to 500 chars)
+            message[:500]
         ]
         sheet.append_row(row)
 
@@ -67,13 +67,9 @@ def webhook():
     return "ok", 200
 
 if __name__ == "__main__":
-    # Remove existing webhook just in case
     import asyncio
     async def setup():
         await application.bot.delete_webhook()
         await application.bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
 
     asyncio.run(setup())
-
-    # Run the Flask app
-    application.run_polling()  # Optional if not using Flask dev server
