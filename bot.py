@@ -17,13 +17,17 @@ logging.basicConfig(level=logging.INFO)
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 SPREADSHEET_NAME = "Telegram Bot Deals"
 CREDENTIALS_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # לדוגמה: https://your-bot.up.railway.app
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # Example: https://your-bot.up.railway.app
 
 if not BOT_TOKEN or not CREDENTIALS_JSON:
     raise ValueError("Missing required environment variables.")
 
-# --- Google Auth ---
-creds = Credentials.from_service_account_info(json.loads(CREDENTIALS_JSON))
+# --- Google Auth with Scopes ---
+scopes = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
+creds = Credentials.from_service_account_info(json.loads(CREDENTIALS_JSON), scopes=scopes)
 gc = gspread.authorize(creds)
 spreadsheet = gc.open(SPREADSHEET_NAME)
 sheet = spreadsheet.sheet1
