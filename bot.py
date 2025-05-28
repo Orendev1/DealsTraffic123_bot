@@ -11,6 +11,7 @@ from datetime import datetime
 from flask import Flask, request
 import asyncio
 import traceback
+import threading
 
 # --- Logging ---
 logging.basicConfig(level=logging.INFO)
@@ -20,6 +21,7 @@ BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 SPREADSHEET_NAME = "Telegram Bot Deals"
 CREDENTIALS_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # למשל: https://your-bot.up.railway.app
+PORT = int(os.getenv("PORT", 8080))  # ברירת מחדל ל-8080 אם לא הוגדר
 
 if not BOT_TOKEN:
     raise ValueError("Missing TELEGRAM_BOT_TOKEN in environment.")
@@ -68,7 +70,7 @@ def health():
 @app.route("/webhook", methods=["POST"])
 def webhook():
     try:
-        print("📥 Webhook triggered!")  # DEBUG - ידפיס ב-Logs
+        print("📥 Webhook triggered!")
         logging.info("Webhook triggered!")
 
         data = request.get_json(force=True)
@@ -85,8 +87,15 @@ def webhook():
         logging.error("Error in webhook:\n" + traceback.format_exc())
         return "error", 500
 
-# --- Set Webhook on startup ---
+# --- Run Flask + Set Webhook ---
 if __name__ == "__main__":
+    def run_flask():
+        print(f"🚀 Starting Flask server on port {PORT}...")
+        app.run(host="0.0.0.0", port=PORT)
+
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.start()
+
     async def setup():
         await application.bot.delete_webhook()
         await application.bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
