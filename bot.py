@@ -20,8 +20,8 @@ logging.basicConfig(level=logging.INFO)
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 SPREADSHEET_NAME = "Telegram Bot Deals"
 CREDENTIALS_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # למשל: https://your-bot.up.railway.app
-PORT = int(os.getenv("PORT", 8080))  # ברירת מחדל 8080 ל-Railway
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+PORT = int(os.getenv("PORT", 8080))
 
 if not BOT_TOKEN:
     raise ValueError("Missing TELEGRAM_BOT_TOKEN in environment.")
@@ -44,7 +44,10 @@ application = ApplicationBuilder().token(BOT_TOKEN).build()
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message.text
     username = update.effective_user.username or update.effective_user.first_name or "Unknown"
+    
+    print("💬 Incoming message:\n", message)
     deals = parse_affiliate_message(message)
+    print("🔍 Parsed deals:\n", json.dumps(deals, indent=2))  # פלט ברור עם הזחה
 
     for deal in deals:
         row = [
