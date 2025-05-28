@@ -3,7 +3,6 @@ import re
 from typing import List, Dict
 
 def clean_line(line: str) -> str:
-    # Remove emojis and special chars that break regex
     return re.sub(r'[^\w\s:$+%.,/\-]', '', line)
 
 def parse_affiliate_message(message: str) -> List[Dict[str, str]]:
@@ -16,7 +15,7 @@ def parse_affiliate_message(message: str) -> List[Dict[str, str]]:
         line = clean_line(line.strip())
         print("[DEBUG] Processing line:", line)
 
-        # Detect GEO (2–3 uppercase letters, or mixed like BE-fr)
+        # GEO
         geo_match = re.match(r"^([A-Z]{2,3}(?:[-/][a-z]{2,3})?)$", line, re.IGNORECASE)
         if geo_match:
             if current_deal:
@@ -26,27 +25,27 @@ def parse_affiliate_message(message: str) -> List[Dict[str, str]]:
             current_deal['GEO'] = geo_match.group(1).upper()
             continue
 
-        # Price formats: 1300 + 12% / 1300$ + 12.5%
+        # CPA + CRG (e.g. 1300 + 12%)
         price_match = re.search(r"(\d{2,5})\$?\s*\+\s*(\d{1,2}(?:\.\d{1,2})?)%?", line)
         if price_match:
             current_deal['CPA'] = price_match.group(1)
             current_deal['CRG'] = price_match.group(2)
             continue
 
-        # Only CPA or CPL price (no CRG)
+        # Only CPA/CPL
         single_price = re.search(r"(CPA|CPL)?[:\s]*\$?(\d{2,5})", line, re.IGNORECASE)
         if single_price:
             if 'CPA' not in current_deal:
-                current_deal[single_price.group(1).upper() if single_price.group(1) else 'CPA'] = single_price.group(2)
+                key = single_price.group(1).upper() if single_price.group(1) else 'CPA'
+                current_deal[key] = single_price.group(2)
             continue
 
-        # Detect Funnel(s)
+        # Funnels
         if 'funnels' in line.lower() or 'funnel' in line.lower() or 'mostly' in line.lower() or 'mix of funnels' in line.lower():
-            funnel_text = line.split(':', 1)[-1].strip()
-            current_deal['Funnels'] = funnel_text
+            current_deal['Funnels'] = line.split(':', 1)[-1].strip()
             continue
 
-        # Source / Traffic
+        # Source
         if 'source' in line.lower() or 'traffic' in line.lower():
             current_deal['Source'] = line.split(':', 1)[-1].strip()
             continue
