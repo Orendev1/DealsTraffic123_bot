@@ -1,26 +1,22 @@
 # parser.py
 import re
+import json
 from typing import List, Dict
+from pathlib import Path
 
-# Load known GEOs, sources, and deal types
-GEO_KEYWORDS = [
-    # ISO country codes
-    'US', 'UK', 'DE', 'FR', 'IT', 'ES', 'PL', 'CA', 'AU', 'NL', 'IE', 'CH', 'BR', 'IN', 'SK', 'CZ', 'PT', 'GR', 'JP', 'BE', 'SE', 'FI', 'DK', 'NO', 'AT', 'GCC', 'LATAM', 'APAC', 'MENA', 'CIS', 'ROW', 'Balkan', 'Baltics', 'Nordics',
-    # Full country names
-    'United States', 'United Kingdom', 'Germany', 'France', 'Italy', 'Spain', 'Poland', 'Canada', 'Australia', 'Netherlands', 'Ireland', 'Switzerland', 'Brazil', 'India', 'Slovakia', 'Czech Republic', 'Portugal', 'Greece', 'Japan', 'Belgium', 'Sweden', 'Finland', 'Denmark', 'Norway', 'Austria',
-    # Regions
-    'LATAM', 'GCC', 'APAC', 'EU', 'MENA', 'CIS', 'ROW', 'Balkan', 'Baltics', 'Nordics'
-]
+# Load keywords from external JSON
+with open(Path(__file__).parent / "keywords.json", encoding="utf-8") as f:
+    KEYWORDS = json.load(f)
 
-TRAFFIC_SOURCES = [
-    'facebook', 'fb', 'google', 'gg', 'ppc', 'seo', 'native', 'taboola', 'outbrain', 'reddit', 'youtube', 'search', 'banners', 'display', 'mail', 'email', 'sms'
-]
+GEO_KEYWORDS = KEYWORDS["geo"]
+TRAFFIC_SOURCES = KEYWORDS["sources"]
+DEAL_TYPES = KEYWORDS["deal_types"]
 
-DEAL_TYPES = ['cpa', 'cpl', 'flat', 'cpa+cg', 'cg', 'crg']
 
 def is_relevant_message(message: str) -> bool:
     message_lower = message.lower()
     return any(deal in message_lower for deal in DEAL_TYPES) and any(geo.lower() in message_lower for geo in GEO_KEYWORDS)
+
 
 def parse_affiliate_message(message: str) -> List[Dict[str, str]]:
     print("[DEBUG] Parsing message:", message)
