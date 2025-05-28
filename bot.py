@@ -2,81 +2,78 @@
 import os
 import json
 import logging
+import gspread
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 from parser import parse_affiliate_message
 from datetime import datetime
+from flask import Flask, request
 
-# Logging
+# --- Logging ---
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
-# Env vars
+# --- ENV ---
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
-GOOGLE_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
 SPREADSHEET_NAME = "Telegram Bot Deals"
+CREDENTIALS_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # לדוגמה: https://dealstraffic123bot-production.up.railway.app
 
 if not BOT_TOKEN:
-    raise ValueError("TELEGRAM_BOT_TOKEN is missing")
-if not WEBHOOK_URL:
-    raise ValueError("WEBHOOK_URL is missing")
-if not GOOGLE_CREDENTIALS:
-    raise ValueError("GOOGLE_APPLICATION_CREDENTIALS_JSON is missing")
+    raise ValueError("Missing TELEGRAM_BOT_TOKEN in environment.")
 
-# Google Sheets auth
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds_dict = json.loads(GOOGLE_CREDENTIALS)
-creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+if not CREDENTIALS_JSON:
+    raise ValueError("Missing GOOGLE_APPLICATION_CREDENTIALS_JSON in environment.")
+
+# --- Google Auth ---
+scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+creds = Credentials.from_service_account_info(json.loads(CREDENTIALS_JSON), scopes=scopes)
 gc = gspread.authorize(creds)
 sheet = gc.open(SPREADSHEET_NAME).sheet1
 
-# Message handler
+# --- Telegram Logic ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message:
-        return
-
-    raw_text = update.message.text
-    if not raw_text:
-        return
-
-    sender = update.effective_chat.title or update.effective_user.username or "Unknown"
-    deals = parse_affiliate_message(raw_text)
+    message = update.message.text
+    username = update.effective_user.username or update.effective_user.first_name or "Unknown"
+    deals = parse_affiliate_message(message)
 
     for deal in deals:
         row = [
-            datetime.utcnow().isoformat(),
-            sender,
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            username,
             deal.get("GEO", ""),
             deal.get("CPA", ""),
             deal.get("CRG", ""),
-            deal.get("CPL", ""),
-            deal.get("Deal Type", ""),
             deal.get("Funnels", ""),
             deal.get("Source", ""),
             deal.get("Cap", ""),
-            "",  # CR – can be added later
-            raw_text
+            message[:500]  # Raw message preview (up to 500 chars)
         ]
-        sheet.append_row(row, value_input_option="USER_ENTERED")
+        sheet.append_row(row)
 
-# Start app
-app = ApplicationBuilder().token(BOT_TOKEN).build()
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+# --- Webhook Setup ---
+app = Flask(__name__)
+application = ApplicationBuilder().token(BOT_TOKEN).build()
+application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
-# Webhook setup
-async def main():
-    await app.bot.delete_webhook()
-    await app.bot.set_webhook(url=WEBHOOK_URL)
-    logger.info("Webhook set to %s", WEBHOOK_URL)
-    await app.run_webhook(
-        listen="0.0.0.0",
-        port=8080,
-        webhook_url=WEBHOOK_URL
-    )
+@app.route("/", methods=["GET"])
+def health():
+    return "Bot is running", 200
+
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), application.bot)
+    application.update_queue.put(update)
+    return "ok", 200
 
 if __name__ == "__main__":
+    # Remove existing webhook just in case
     import asyncio
-    asyncio.run(main())
+    async def setup():
+        await application.bot.delete_webhook()
+        await application.bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
+
+    asyncio.run(setup())
+
+    # Run the Flask app
+    application.run_polling()  # Optional if not using Flask dev server
