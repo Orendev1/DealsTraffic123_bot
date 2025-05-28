@@ -1,94 +1,62 @@
+# parser.py
 import re
+from typing import List, Dict
 
-# דפוסים
-GEO_PATTERN = re.compile(r"(?<!\w)([A-Z]{2}|GCC|LATAM|ASIA|NORDICS|DK/SE/NO/FI|SE/DK/NO)(?=\s|:|\n)", re.IGNORECASE)
-CPA_PATTERN = re.compile(r"(?:CPA[:\s]*)?\$?(\d{3,5})(?=\s*\+|\s|$)", re.IGNORECASE)
-CRG_PATTERN = re.compile(r"\+?\s*(\d{1,2})%\s*(?:CR|CRG)?", re.IGNORECASE)
-CPL_PATTERN = re.compile(r"CPL[:\s]*\$?(\d{2,5})", re.IGNORECASE)
-FUNNEL_PATTERN = re.compile(r"(?:Funnels?:|Mix of funnels:|Mostly:)\s*(.+?)(?=\n|Source|Traffic|FB|GG|Taboola|Outbrain|Cap|\Z)", re.IGNORECASE | re.DOTALL)
-SOURCE_PATTERN = re.compile(r"(?:Source|Traffic|FB|GG|BING|SEO|Taboola|Outbrain|Native|PPC)[\s:+\-]*([\w\s+/.-]+)", re.IGNORECASE)
-CAP_PATTERN = re.compile(r"Cap[:\s]+(\d{1,4})", re.IGNORECASE)
-CR_PATTERN = re.compile(r"CR[:\s]+(\d{1,2})", re.IGNORECASE)
-
-def parse_deals(text):
+def parse_affiliate_message(message: str) -> List[Dict[str, str]]:
+    lines = message.strip().splitlines()
     deals = []
-    text = text.strip()
+    current_deal = {}
 
-    # מציאת GEO
-    geo_matches = list(GEO_PATTERN.finditer(text))
-
-    if not geo_matches:
-        blocks = [text]
-    else:
-        blocks = []
-        for i, match in enumerate(geo_matches):
-            start = match.start()
-            end = geo_matches[i + 1].start() if i + 1 < len(geo_matches) else len(text)
-            block = text[start:end].strip()
-
-            if block.count('\n') <= 1 and len(block) <= 6 and i + 1 < len(geo_matches):
-                continue
-
-            blocks.append(block)
-
-    for block in blocks:
-        deal = {}
-
-        # GEO
-        geo_match = GEO_PATTERN.search(block)
+    for line in lines:
+        line = line.strip()
+        
+        # Detect GEO or country
+        geo_match = re.match(r"^(\W{0,2}[A-Z]{2,3})(\s+[-:\u2013])?", line)
         if geo_match:
-            deal["GEO"] = geo_match.group(1).upper()
+            if current_deal:
+                deals.append(current_deal)
+                current_deal = {}
+            current_deal['GEO'] = geo_match.group(1).strip("-: –")
+            continue
 
-        # CPA
-        cpa_match = CPA_PATTERN.search(block)
-        if cpa_match:
-            deal["CPA"] = int(cpa_match.group(1))
+        # Detect CPA or CPL
+        if 'CPA' in line.upper() or 'CPL' in line.upper():
+            price_match = re.search(r'(\d{2,5})\$?\s*\+?\s*(\d{1,2})?%?', line)
+            if price_match:
+                current_deal['CPA'] = price_match.group(1)
+                if price_match.group(2):
+                    current_deal['CRG'] = price_match.group(2)
+            continue
 
-        # CRG
-        crg_match = CRG_PATTERN.search(block)
-        if crg_match:
-            deal["CRG"] = int(crg_match.group(1))
+        price_standalone = re.match(r'(\d{2,5})\$?\s*\+\s*(\d{1,2})%?', line)
+        if price_standalone and 'CPA' not in current_deal:
+            current_deal['CPA'] = price_standalone.group(1)
+            current_deal['CRG'] = price_standalone.group(2)
+            continue
 
-        # CPL
-        cpl_match = CPL_PATTERN.search(block)
-        if cpl_match:
-            deal["CPL"] = int(cpl_match.group(1))
+        # Detect Funnels
+        if 'funnels' in line.lower():
+            current_deal['Funnels'] = line.split(':', 1)[-1].strip()
+            continue
+        elif 'mostly:' in line.lower():
+            current_deal['Funnels'] = line.split(':', 1)[-1].strip()
+            continue
 
-        # Cap
-        cap_match = CAP_PATTERN.search(block)
-        if cap_match:
-            deal["Cap"] = int(cap_match.group(1))
+        # Detect Source / Traffic
+        if 'source' in line.lower() or 'traffic' in line.lower():
+            current_deal['Source'] = line.split(':', 1)[-1].strip()
+            continue
+        elif re.match(r'^(FB|GG|SEO|PPC|Native|Taboola|Outbrain|BING)([+/\s]*\w+)*$', line, re.I):
+            current_deal['Source'] = line.strip()
+            continue
 
-        # CR
-        cr_match = CR_PATTERN.search(block)
-        if cr_match:
-            deal["CR"] = int(cr_match.group(1))
+        # Detect Cap
+        if 'cap' in line.lower():
+            cap_match = re.search(r'(\d{1,4})\s*(leads|cap)', line, re.IGNORECASE)
+            if cap_match:
+                current_deal['Cap'] = cap_match.group(1)
 
-        # Funnel
-        funnel_match = FUNNEL_PATTERN.search(block)
-        if funnel_match:
-            cleaned = funnel_match.group(1).replace("\n", ", ")
-            deal["Funnel"] = ", ".join([f.strip() for f in cleaned.split(",") if f.strip()])
-
-        # Source
-        source_match = SOURCE_PATTERN.search(block)
-        if source_match:
-            deal["Source"] = source_match.group(1).strip().lower()
-
-        # Deal Type
-        if "CPA" in block and "CRG" in block:
-            deal["Deal Type"] = "CPA + CRG"
-        elif "CPA" in block:
-            deal["Deal Type"] = "CPA"
-        elif "CPL" in block:
-            deal["Deal Type"] = "CPL"
-        elif "FLAT" in block.upper():
-            deal["Deal Type"] = "FLAT"
-
-        # Raw Message (cutoff to 100 chars)
-        raw = block.strip().replace("\n", " ")
-        deal["raw_message"] = raw[:100] + "..." if len(raw) > 100 else raw
-
-        deals.append(deal)
+    if current_deal:
+        deals.append(current_deal)
 
     return deals
