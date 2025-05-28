@@ -17,19 +17,23 @@ logging.basicConfig(level=logging.INFO)
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 SPREADSHEET_NAME = "Telegram Bot Deals"
 CREDENTIALS_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # לדוגמה: https://dealstraffic123bot-production.up.railway.app
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # למשל: https://your-project.up.railway.app
 
 if not BOT_TOKEN:
     raise ValueError("Missing TELEGRAM_BOT_TOKEN in environment.")
-
 if not CREDENTIALS_JSON:
     raise ValueError("Missing GOOGLE_APPLICATION_CREDENTIALS_JSON in environment.")
+if not WEBHOOK_URL:
+    raise ValueError("Missing WEBHOOK_URL in environment.")
 
-# --- Google Auth ---
-scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+# --- Google Auth with fixed scopes ---
+scopes = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive.readonly"
+]
 creds = Credentials.from_service_account_info(json.loads(CREDENTIALS_JSON), scopes=scopes)
 gc = gspread.authorize(creds)
-sheet = gc.open(SPREADSHEET_NAME).sheet1
+sheet = gc.open(SPREADSHEET_NAME).sheet1  # או: gc.open_by_key("your-spreadsheet-id")
 
 # --- Telegram Logic ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -71,5 +75,4 @@ if __name__ == "__main__":
     async def setup():
         await application.bot.delete_webhook()
         await application.bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
-
     asyncio.run(setup())
