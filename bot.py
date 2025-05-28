@@ -13,41 +13,31 @@ import asyncio
 import traceback
 import threading
 
-# --- Logging ---
 logging.basicConfig(level=logging.INFO)
 
-# --- ENV ---
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 SPREADSHEET_NAME = "Telegram Bot Deals"
 CREDENTIALS_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 PORT = int(os.getenv("PORT", 8080))
 
-if not BOT_TOKEN:
-    raise ValueError("Missing TELEGRAM_BOT_TOKEN in environment.")
+if not BOT_TOKEN or not CREDENTIALS_JSON:
+    raise ValueError("Missing environment variables.")
 
-if not CREDENTIALS_JSON:
-    raise ValueError("Missing GOOGLE_APPLICATION_CREDENTIALS_JSON in environment.")
-
-# --- Google Auth ---
-scopes = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive",
-]
+scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 creds = Credentials.from_service_account_info(json.loads(CREDENTIALS_JSON), scopes=scopes)
 gc = gspread.authorize(creds)
 sheet = gc.open(SPREADSHEET_NAME).sheet1
 
-# --- Telegram Logic ---
 application = ApplicationBuilder().token(BOT_TOKEN).build()
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message.text
     username = update.effective_user.username or update.effective_user.first_name or "Unknown"
-    
-    print("💬 Incoming message:\n", message)
     deals = parse_affiliate_message(message)
-    print("🔍 Parsed deals:\n", json.dumps(deals, indent=2))  # פלט ברור עם הזחה
+
+    print("🔍 Parsed deals:")
+    print(json.dumps(deals, indent=2))
 
     for deal in deals:
         row = [
@@ -56,16 +46,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             deal.get("GEO", ""),
             deal.get("CPA", ""),
             deal.get("CRG", ""),
+            deal.get("CPL", ""),
+            "CPA" if "CPA" in deal else "CPL" if "CPL" in deal else "",
             deal.get("Funnels", ""),
             deal.get("Source", ""),
             deal.get("Cap", ""),
-            message[:500]
+            message[:300] + "..." if len(message) > 300 else message
         ]
         sheet.append_row(row)
 
 application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
-# --- Flask App ---
 app = Flask(__name__)
 
 @app.route("/", methods=["GET"])
@@ -75,25 +66,17 @@ def health():
 @app.route("/webhook", methods=["POST"])
 def webhook():
     try:
-        print("📥 Webhook triggered!")
-        logging.info("Webhook triggered!")
-
         data = request.get_json(force=True)
         update = Update.de_json(data, application.bot)
-
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-
         loop.run_until_complete(application.process_update(update))
         loop.close()
-
         return "ok", 200
     except Exception:
-        print("❌ Webhook error!")
-        logging.error("Error in webhook:\n" + traceback.format_exc())
+        logging.error("Webhook error:\n" + traceback.format_exc())
         return "error", 500
 
-# --- Run Flask and Initialize Bot ---
 async def setup_bot():
     await application.initialize()
     await application.bot.delete_webhook()
@@ -107,5 +90,4 @@ if __name__ == "__main__":
 
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.start()
-
     asyncio.run(setup_bot())
