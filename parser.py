@@ -53,14 +53,14 @@ def parse_affiliate_message(message: str) -> List[Dict[str, str]]:
             continue
 
         # Standalone CPA or CPL detection
-        if 'cpa' in line.lower() or 'cpl' in line.lower():
+        if any(deal_type in line.lower() for deal_type in DEAL_TYPES):
             simple_price = re.search(r'(\d{2,5})\$?', line)
             if simple_price:
                 current_deal['CPA'] = simple_price.group(1)
             continue
 
         # Funnel extraction
-        if 'funnels:' in line.lower() or 'funnel:' in line.lower() or 'mostly:' in line.lower():
+        if any(funnel_key in line.lower() for funnel_key in KEYWORDS.get("funnels", [])) or 'mostly:' in line.lower():
             current_deal['Funnels'] = line.split(':', 1)[-1].strip()
             continue
 
