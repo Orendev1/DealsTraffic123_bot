@@ -66,20 +66,24 @@ def health():
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    data = request.get_json(force=True)
-    update = Update.de_json(data, application.bot)
+    try:
+        data = request.get_json(force=True)
+        update = Update.de_json(data, application.bot)
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(application.process_update(update))
-    loop.close()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(application.process_update(update))
+        loop.close()
 
-    return "ok", 200
+        return "ok", 200
+    except Exception as e:
+        logging.error(f"Error in webhook: {e}")
+        return "error", 500
 
-# --- Webhook Setup / Trigger set_webhook.py once ---
+# --- Set Webhook on start ---
 if __name__ == "__main__":
-    import set_webhook  # הפעלה חד-פעמית של set_webhook.py
-    from time import sleep
-    sleep(3)  # השהייה רגעית כדי לוודא שזה נסיים להריץ
+    async def setup():
+        await application.bot.delete_webhook()
+        await application.bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
 
-    # אפשר להסיר את הקריאה הזו אחרי שה-Webhook מוגדר בהצלחה
+    asyncio.run(setup())
