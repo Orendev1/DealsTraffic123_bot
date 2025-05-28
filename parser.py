@@ -1,6 +1,7 @@
-# parser.py
 import re
 from typing import List, Dict
+
+GEO_CODES = {"UK", "US", "DE", "FR", "IL", "AU", "CA", "NZ", "IN", "BR", "MX"}  # אפשר להרחיב
 
 def parse_affiliate_message(message: str) -> List[Dict[str, str]]:
     print("[DEBUG] Parsing message:", message)
@@ -12,14 +13,13 @@ def parse_affiliate_message(message: str) -> List[Dict[str, str]]:
         line = line.strip()
         print("[DEBUG] Processing line:", line)
 
-        # Detect GEO or country
-        geo_match = re.match(r"^(\W{0,2}[A-Z]{2,3})(\s+[-:\u2013])?", line)
-        if geo_match:
+        # Detect GEO as a standalone 2–3 letter country code
+        if line.upper() in GEO_CODES:
             if current_deal:
                 deals.append(current_deal)
                 print("[DEBUG] Appending deal:", current_deal)
                 current_deal = {}
-            current_deal['GEO'] = geo_match.group(1).strip("-: –")
+            current_deal['GEO'] = line.upper()
             continue
 
         # Detect CPA or CPL
@@ -55,7 +55,7 @@ def parse_affiliate_message(message: str) -> List[Dict[str, str]]:
 
         # Detect Cap
         if 'cap' in line.lower():
-            cap_match = re.search(r'(\d{1,4})\s*(leads|cap)', line, re.IGNORECASE)
+            cap_match = re.search(r'(\d{1,4})\s*(leads|cap)?', line, re.IGNORECASE)
             if cap_match:
                 current_deal['Cap'] = cap_match.group(1)
 
