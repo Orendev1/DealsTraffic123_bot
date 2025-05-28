@@ -55,7 +55,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         sheet.append_row(row)
 
-# --- Webhook Setup ---
+# --- Flask Web Server + Webhook ---
 app = Flask(__name__)
 application = ApplicationBuilder().token(BOT_TOKEN).build()
 application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
@@ -69,11 +69,14 @@ def webhook():
     data = request.get_json(force=True)
     update = Update.de_json(data, application.bot)
 
-    loop = asyncio.get_event_loop()
-    asyncio.run_coroutine_threadsafe(application.process_update(update), loop)
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(application.process_update(update))
+    loop.close()
 
     return "ok", 200
 
+# --- Webhook Setup (only when run directly) ---
 if __name__ == "__main__":
     async def setup():
         await application.bot.delete_webhook()
