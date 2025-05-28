@@ -12,81 +12,74 @@ from flask import Flask, request
 
 # --- Logging ---
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # --- ENV ---
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 SPREADSHEET_NAME = "Telegram Bot Deals"
 CREDENTIALS_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # https://your-bot.up.railway.app
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # example: https://your-bot.up.railway.app
 
 if not BOT_TOKEN:
     raise ValueError("Missing TELEGRAM_BOT_TOKEN in environment.")
-
 if not CREDENTIALS_JSON:
     raise ValueError("Missing GOOGLE_APPLICATION_CREDENTIALS_JSON in environment.")
 
 # --- Google Auth ---
-creds_dict = json.loads(CREDENTIALS_JSON)
-creds = Credentials.from_service_account_info(creds_dict)
+creds = Credentials.from_service_account_info(json.loads(CREDENTIALS_JSON))
 gc = gspread.authorize(creds)
-sh = gc.open(SPREADSHEET_NAME)
-worksheet = sh.sheet1
+sheet = gc.open(SPREADSHEET_NAME).sheet1
 
-# --- Flask Webhook ---
+# --- Flask for webhook ---
 app = Flask(__name__)
-
-@app.route("/")
-def index():
-    return "Bot running"
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    update = Update.de_json(request.get_json(force=True), bot)
-    application.update_queue.put_nowait(update)
+    logger.info("Webhook triggered!")
+    update = Update.de_json(request.get_json(force=True), application.bot)
+    application.create_task(application.process_update(update))
     return "OK"
 
-# --- Telegram Handler ---
+# --- Message Handler ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message.text
-    logging.info("\U0001F4AC Incoming message:\n\n%s", message)
+    username = update.effective_user.username or "Unknown"
+    chat_title = update.effective_chat.title or username
+    logger.info("💬 Incoming message:\n%s", message)
 
-    try:
-        deals = parse_affiliate_message(message)
-    except Exception as e:
-        logging.exception("Failed to parse message")
-        return
-
+    deals = parse_affiliate_message(message)
     if not deals:
-        logging.info("No deals parsed from message.")
+        logger.info("⚠️ No relevant deals found in message.")
         return
 
     for deal in deals:
         row = [
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            update.message.chat.title or update.message.chat.username or update.message.chat.id,
+            datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+            chat_title,
             deal.get("GEO", ""),
             deal.get("CPA", ""),
             deal.get("CRG", ""),
             deal.get("Funnels", ""),
             deal.get("Source", ""),
             deal.get("Cap", ""),
-            message
+            message.replace('\n', ' ')[:1000]  # raw message snippet
         ]
-        worksheet.append_row(row)
-        logging.info("✅ Deal saved: %s", row)
+        sheet.append_row(row, value_input_option="USER_ENTERED")
+        logger.info("✅ Deal saved: %s", row)
 
-# --- Telegram Bot Init ---
+# --- Telegram Bot Setup ---
 application = ApplicationBuilder().token(BOT_TOKEN).build()
-bot = application.bot
-application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-async def main():
-    await bot.delete_webhook()
-    await bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
-    logging.info("\u2705 Bot initialized and webhook set!")
+# --- Set webhook ---
+async def set_webhook():
+    await application.bot.delete_webhook()
+    await application.bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
+    logger.info("✅ Bot initialized and webhook set!")
 
-import asyncio
-asyncio.run(main())
-
+# --- Start Flask + Bot ---
 if __name__ == "__main__":
-    app.run(port=8080, host="0.0.0.0")
+    import asyncio
+    asyncio.run(set_webhook())
+    print("🚀 Starting Flask server on port 8080...")
+    app.run(host="0.0.0.0", port=8080)
