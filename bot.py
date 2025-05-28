@@ -21,7 +21,7 @@ BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 SPREADSHEET_NAME = "Telegram Bot Deals"
 CREDENTIALS_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # למשל: https://your-bot.up.railway.app
-PORT = int(os.getenv("PORT", 8080))  # ברירת מחדל ל-8080 אם לא הוגדר
+PORT = int(os.getenv("PORT", 8080))  # ברירת מחדל 8080 ל-Railway
 
 if not BOT_TOKEN:
     raise ValueError("Missing TELEGRAM_BOT_TOKEN in environment.")
@@ -78,7 +78,12 @@ def webhook():
 
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        loop.run_until_complete(application.process_update(update))
+
+        async def process():
+            await application.initialize()  # ← חובה לגרסאות PTB 20+
+            await application.process_update(update)
+
+        loop.run_until_complete(process())
         loop.close()
 
         return "ok", 200
