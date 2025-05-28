@@ -1,12 +1,12 @@
 import re
 
 # דפוסים
-GEO_PATTERN = re.compile(r"(?<!\w)([A-Z]{2}|GCC|LATAM|ASIA|NORDICS)(?=\s|:|\n)", re.IGNORECASE)
-CPA_PATTERN = re.compile(r"CPA[:\s]*\$?(\d{2,5})", re.IGNORECASE)
+GEO_PATTERN = re.compile(r"(?<!\w)([A-Z]{2}|GCC|LATAM|ASIA|NORDICS|DK/SE/NO/FI|SE/DK/NO)(?=\s|:|\n)", re.IGNORECASE)
+CPA_PATTERN = re.compile(r"(?:CPA[:\s]*)?\$?(\d{3,5})(?=\s*\+|\s|$)", re.IGNORECASE)
 CRG_PATTERN = re.compile(r"\+?\s*(\d{1,2})%\s*(?:CR|CRG)?", re.IGNORECASE)
 CPL_PATTERN = re.compile(r"CPL[:\s]*\$?(\d{2,5})", re.IGNORECASE)
-FUNNEL_PATTERN = re.compile(r"Funnels?:\s*(.+?)(?=\n|Source|Traffic|Cap|\Z)", re.IGNORECASE | re.DOTALL)
-SOURCE_PATTERN = re.compile(r"(?:Source|Traffic):\s*([\w\s+/.-]+)", re.IGNORECASE)
+FUNNEL_PATTERN = re.compile(r"(?:Funnels?:|Mix of funnels:|Mostly:)\s*(.+?)(?=\n|Source|Traffic|FB|GG|Taboola|Outbrain|Cap|\Z)", re.IGNORECASE | re.DOTALL)
+SOURCE_PATTERN = re.compile(r"(?:Source|Traffic|FB|GG|BING|SEO|Taboola|Outbrain|Native|PPC)[\s:+\-]*([\w\s+/.-]+)", re.IGNORECASE)
 CAP_PATTERN = re.compile(r"Cap[:\s]+(\d{1,4})", re.IGNORECASE)
 CR_PATTERN = re.compile(r"CR[:\s]+(\d{1,2})", re.IGNORECASE)
 
@@ -14,10 +14,9 @@ def parse_deals(text):
     deals = []
     text = text.strip()
 
-    # מצא את כל הופעות GEO
+    # מציאת GEO
     geo_matches = list(GEO_PATTERN.finditer(text))
 
-    # אם אין GEO בכלל – כל ההודעה תיחשב בלוק אחד
     if not geo_matches:
         blocks = [text]
     else:
@@ -27,14 +26,13 @@ def parse_deals(text):
             end = geo_matches[i + 1].start() if i + 1 < len(geo_matches) else len(text)
             block = text[start:end].strip()
 
-            # אם GEO מופיע לבד (כמו "UK\nCPA:..."), נאחד אותו עם מה שמתחת
             if block.count('\n') <= 1 and len(block) <= 6 and i + 1 < len(geo_matches):
-                continue  # נדלג, כי הוא יאוחד בבא אחריו
+                continue
 
             blocks.append(block)
 
     for block in blocks:
-        deal = {"raw_message": block}
+        deal = {}
 
         # GEO
         geo_match = GEO_PATTERN.search(block)
@@ -86,6 +84,10 @@ def parse_deals(text):
             deal["Deal Type"] = "CPL"
         elif "FLAT" in block.upper():
             deal["Deal Type"] = "FLAT"
+
+        # Raw Message (cutoff to 100 chars)
+        raw = block.strip().replace("\n", " ")
+        deal["raw_message"] = raw[:100] + "..." if len(raw) > 100 else raw
 
         deals.append(deal)
 
