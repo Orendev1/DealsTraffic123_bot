@@ -9,85 +9,84 @@ from google.oauth2.service_account import Credentials
 from parser import parse_affiliate_message
 from datetime import datetime
 from flask import Flask, request
-import asyncio
-import traceback
-import threading
 
+# --- Logging ---
 logging.basicConfig(level=logging.INFO)
 
+# --- ENV ---
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 SPREADSHEET_NAME = "Telegram Bot Deals"
 CREDENTIALS_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
-PORT = int(os.getenv("PORT", 8080))
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # https://your-bot.up.railway.app
 
-if not BOT_TOKEN or not CREDENTIALS_JSON:
-    raise ValueError("Missing environment variables.")
+if not BOT_TOKEN:
+    raise ValueError("Missing TELEGRAM_BOT_TOKEN in environment.")
 
-scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-creds = Credentials.from_service_account_info(json.loads(CREDENTIALS_JSON), scopes=scopes)
+if not CREDENTIALS_JSON:
+    raise ValueError("Missing GOOGLE_APPLICATION_CREDENTIALS_JSON in environment.")
+
+# --- Google Auth ---
+creds_dict = json.loads(CREDENTIALS_JSON)
+creds = Credentials.from_service_account_info(creds_dict)
 gc = gspread.authorize(creds)
-sheet = gc.open(SPREADSHEET_NAME).sheet1
+sh = gc.open(SPREADSHEET_NAME)
+worksheet = sh.sheet1
 
-application = ApplicationBuilder().token(BOT_TOKEN).build()
+# --- Flask Webhook ---
+app = Flask(__name__)
 
+@app.route("/")
+def index():
+    return "Bot running"
+
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), bot)
+    application.update_queue.put_nowait(update)
+    return "OK"
+
+# --- Telegram Handler ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message.text
-    username = update.effective_user.username or update.effective_user.first_name or "Unknown"
-    deals = parse_affiliate_message(message)
+    logging.info("\U0001F4AC Incoming message:\n\n%s", message)
 
-    print("🔍 Parsed deals:")
-    print(json.dumps(deals, indent=2))
+    try:
+        deals = parse_affiliate_message(message)
+    except Exception as e:
+        logging.exception("Failed to parse message")
+        return
+
+    if not deals:
+        logging.info("No deals parsed from message.")
+        return
 
     for deal in deals:
         row = [
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            username,
+            update.message.chat.title or update.message.chat.username or update.message.chat.id,
             deal.get("GEO", ""),
             deal.get("CPA", ""),
             deal.get("CRG", ""),
-            deal.get("CPL", ""),
-            "CPA" if "CPA" in deal else "CPL" if "CPL" in deal else "",
             deal.get("Funnels", ""),
             deal.get("Source", ""),
             deal.get("Cap", ""),
-            message[:300] + "..." if len(message) > 300 else message
+            message
         ]
-        sheet.append_row(row)
+        worksheet.append_row(row)
+        logging.info("✅ Deal saved: %s", row)
 
+# --- Telegram Bot Init ---
+application = ApplicationBuilder().token(BOT_TOKEN).build()
+bot = application.bot
 application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
-app = Flask(__name__)
+async def main():
+    await bot.delete_webhook()
+    await bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
+    logging.info("\u2705 Bot initialized and webhook set!")
 
-@app.route("/", methods=["GET"])
-def health():
-    return "Bot is running", 200
-
-@app.route("/webhook", methods=["POST"])
-def webhook():
-    try:
-        data = request.get_json(force=True)
-        update = Update.de_json(data, application.bot)
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(application.process_update(update))
-        loop.close()
-        return "ok", 200
-    except Exception:
-        logging.error("Webhook error:\n" + traceback.format_exc())
-        return "error", 500
-
-async def setup_bot():
-    await application.initialize()
-    await application.bot.delete_webhook()
-    await application.bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
-    print("✅ Bot initialized and webhook set!")
+import asyncio
+asyncio.run(main())
 
 if __name__ == "__main__":
-    def run_flask():
-        print(f"🚀 Starting Flask server on port {PORT}...")
-        app.run(host="0.0.0.0", port=PORT)
-
-    flask_thread = threading.Thread(target=run_flask)
-    flask_thread.start()
-    asyncio.run(setup_bot())
+    app.run(port=8080, host="0.0.0.0")
