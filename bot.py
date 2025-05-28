@@ -15,23 +15,20 @@ logging.basicConfig(level=logging.INFO)
 
 # --- ENV ---
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-SPREADSHEET_NAME = os.getenv("SPREADSHEET_NAME")
+SPREADSHEET_NAME = "Telegram Bot Deals"
 CREDENTIALS_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # לדוגמה: https://dealstraffic123bot-production.up.railway.app
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # לדוגמה: https://your-bot.up.railway.app
 
 if not BOT_TOKEN:
     raise ValueError("Missing TELEGRAM_BOT_TOKEN in environment.")
+
 if not CREDENTIALS_JSON:
     raise ValueError("Missing GOOGLE_APPLICATION_CREDENTIALS_JSON in environment.")
-if not SPREADSHEET_NAME:
-    raise ValueError("Missing SPREADSHEET_NAME in environment.")
-if not WEBHOOK_URL:
-    raise ValueError("Missing WEBHOOK_URL in environment.")
 
 # --- Google Auth ---
 scopes = [
     "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive"
+    "https://www.googleapis.com/auth/drive",
 ]
 creds = Credentials.from_service_account_info(json.loads(CREDENTIALS_JSON), scopes=scopes)
 gc = gspread.authorize(creds)
@@ -69,7 +66,14 @@ def health():
 @app.route("/webhook", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
-    application.update_queue.put(update)
+
+    # פתרון נכון שמריץ את ההודעה מיד
+    async def process_update():
+        await application.process_update(update)
+
+    import asyncio
+    asyncio.create_task(process_update())
+
     return "ok", 200
 
 if __name__ == "__main__":
@@ -79,4 +83,3 @@ if __name__ == "__main__":
         await application.bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
 
     asyncio.run(setup())
-    app.run(host="0.0.0.0", port=8080)
