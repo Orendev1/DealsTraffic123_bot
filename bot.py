@@ -68,7 +68,10 @@ def health():
 def webhook():
     data = request.get_json(force=True)
     update = Update.de_json(data, application.bot)
-    asyncio.get_event_loop().create_task(application.process_update(update))
+
+    loop = asyncio.get_event_loop()
+    asyncio.run_coroutine_threadsafe(application.process_update(update), loop)
+
     return "ok", 200
 
 if __name__ == "__main__":
