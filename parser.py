@@ -13,17 +13,8 @@ TRAFFIC_SOURCES = KEYWORDS["sources"]
 DEAL_TYPES = KEYWORDS["deal_types"]
 
 
-def is_relevant_message(message: str) -> bool:
-    message_lower = message.lower()
-    return any(deal in message_lower for deal in DEAL_TYPES) and any(geo.lower() in message_lower for geo in GEO_KEYWORDS)
-
-
 def parse_affiliate_message(message: str) -> List[Dict[str, str]]:
     print("[DEBUG] Parsing message:", message)
-    if not is_relevant_message(message):
-        print("[DEBUG] Message not relevant.")
-        return []
-
     lines = message.strip().splitlines()
     deals = []
     current_deal = {}
@@ -31,6 +22,10 @@ def parse_affiliate_message(message: str) -> List[Dict[str, str]]:
     for line in lines:
         line = line.strip()
         print("[DEBUG] Processing line:", line)
+
+        # Skip irrelevant lines (empty or headings)
+        if not line or len(line) < 2:
+            continue
 
         # GEO detection
         geo_match = re.match(r'^(?P<geo>[A-Z]{2,3})(\s+[-:\u2013])?', line)
