@@ -17,7 +17,7 @@ logging.basicConfig(level=logging.INFO)
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 SPREADSHEET_NAME = "Telegram Bot Deals"
 CREDENTIALS_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # Example: https://your-bot.up.railway.app
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # לדוגמה: https://your-bot.up.railway.app
 
 if not BOT_TOKEN or not CREDENTIALS_JSON:
     raise ValueError("Missing required environment variables.")
@@ -57,7 +57,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- Webhook Server ---
 flask_app = Flask(__name__)
 
-@app.post("/webhook")
+@flask_app.post("/webhook")
 def webhook():
     update = Update.de_json(request.get_json(force=True), app.bot)
     app.update_queue.put_nowait(update)
