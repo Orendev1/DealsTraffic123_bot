@@ -10,6 +10,7 @@ from parser import parse_affiliate_message
 from datetime import datetime
 from flask import Flask, request
 import asyncio
+import traceback
 
 # --- Logging ---
 logging.basicConfig(level=logging.INFO)
@@ -76,8 +77,8 @@ def webhook():
         loop.close()
 
         return "ok", 200
-    except Exception as e:
-        logging.error(f"Error in webhook: {e}")
+    except Exception:
+        logging.error("Error in webhook:\n" + traceback.format_exc())
         return "error", 500
 
 # --- Set Webhook on start ---
