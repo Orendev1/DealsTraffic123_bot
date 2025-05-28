@@ -76,10 +76,10 @@ def webhook():
 
     return "ok", 200
 
-# --- Webhook Setup (only when run directly) ---
+# --- Webhook Setup / Trigger set_webhook.py once ---
 if __name__ == "__main__":
-    async def setup():
-        await application.bot.delete_webhook()
-        await application.bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
+    import set_webhook  # הפעלה חד-פעמית של set_webhook.py
+    from time import sleep
+    sleep(3)  # השהייה רגעית כדי לוודא שזה נסיים להריץ
 
-    asyncio.run(setup())
+    # אפשר להסיר את הקריאה הזו אחרי שה-Webhook מוגדר בהצלחה
