@@ -40,15 +40,21 @@ bot_app = ApplicationBuilder().token(BOT_TOKEN).build()
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message is None or update.message.text is None:
-        print("[DEBUG] Skipping non-text message")
+        logging.info("[DEBUG] Skipping non-text message or unsupported message type")
         return
 
     message = update.message.text
     sender = update.effective_chat.title or update.effective_user.username or str(update.effective_chat.id)
-    print(f"[DEBUG] Message from {sender}: {message}")
+
+    logging.info(f"[DEBUG] Message from {sender}: {message}")
 
     deals = parse_affiliate_message(message)
-    print("[DEBUG] Parsed deals:", deals)
+
+    if not deals:
+        logging.info("[DEBUG] No deals parsed.")
+        return
+
+    logging.info(f"[DEBUG] Parsed deals: {deals}")
 
     for deal in deals:
         row = [
@@ -65,7 +71,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             deal.get("CR", ""),
             message
         ]
-        print("[DEBUG] Writing row:", row)
+        logging.info(f"[DEBUG] Writing row to sheet: {row}")
         sheet.append_row(row, value_input_option="USER_ENTERED")
 
 # --- Webhook Server ---
@@ -73,9 +79,13 @@ flask_app = Flask(__name__)
 
 @flask_app.route("/webhook", methods=["POST"])
 def webhook():
-    update = Update.de_json(request.get_json(force=True), bot_app.bot)
-    bot_app.update_queue.put_nowait(update)
-    return "OK"
+    try:
+        update = Update.de_json(request.get_json(force=True), bot_app.bot)
+        bot_app.update_queue.put_nowait(update)
+        return "OK"
+    except Exception as e:
+        logging.exception("[ERROR] Failed to process webhook:")
+        return "ERROR", 500
 
 async def set_webhook():
     await bot_app.bot.delete_webhook()
@@ -85,6 +95,6 @@ async def set_webhook():
 # --- Start ---
 if __name__ == "__main__":
     import asyncio
-    bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))  # ✅ זה חייב להיות לפני set_webhook
     asyncio.run(set_webhook())
+    bot_app.add_handler(MessageHandler(filters.ALL, handle_message))
     flask_app.run(host="0.0.0.0", port=8080)
