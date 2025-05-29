@@ -24,10 +24,13 @@ if not GOOGLE_CREDS_JSON:
     crash_log("Missing GOOGLE_APPLICATION_CREDENTIALS_JSON")
     raise ValueError("Missing GOOGLE_APPLICATION_CREDENTIALS_JSON")
 
-# -- Google Auth Test --
+# -- Google Sheets Auth with Correct Scopes --
 try:
-    logging.info("🔐 Trying to connect to Google Sheets...")
-    creds = Credentials.from_service_account_info(json.loads(GOOGLE_CREDS_JSON))
+    logging.info("🔐 Connecting to Google Sheets with correct scopes...")
+    SCOPES = ['https://www.googleapis.com/auth/spreadsheets',
+              'https://www.googleapis.com/auth/drive']
+
+    creds = Credentials.from_service_account_info(json.loads(GOOGLE_CREDS_JSON), scopes=SCOPES)
     client = gspread.authorize(creds)
     sheet = client.open(SPREADSHEET_NAME).sheet1
     logging.info("✅ Google Sheets connection successful.")
@@ -35,7 +38,7 @@ except Exception as e:
     crash_log(f"Google Sheets auth failed: {e}")
     raise
 
-# -- Flask Setup --
+# -- Flask App Setup --
 app = Flask(__name__)
 
 @app.route('/')
