@@ -24,6 +24,7 @@ app = Flask(__name__)
 # Get bot token from environment
 TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 if not TOKEN:
+    logger.error("No TELEGRAM_BOT_TOKEN found in environment variables")
     raise ValueError("No TELEGRAM_BOT_TOKEN found in environment variables")
 
 # Initialize bot
@@ -33,6 +34,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         message = update.message
         if not message or not message.text:
+            logger.info("No message or text found in update.")
             return
 
         logger.info(f"Received message: {message.text}")
@@ -46,17 +48,24 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.info("No deals found in message")
 
     except Exception as e:
-        logger.error(f"Error processing message: {str(e)}")
+        logger.error(f"Error processing message: {str(e)}", exc_info=True)
 
 # Add handlers
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    if request.method == "POST":
-        update = Update.de_json(request.get_json(), application.bot)
+    try:
+        data = request.get_json()
+        logger.info(f"Webhook data: {data}")
+        update = Update.de_json(data, application.bot)
+        logger.info("Processing update with telegram bot...")
         asyncio.run(application.process_update(update))
+        logger.info("Update processed successfully.")
         return jsonify({"status": "ok"})
+    except Exception as e:
+        logger.error(f"Exception in /webhook: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -64,10 +73,12 @@ def health_check():
 
 if __name__ == '__main__':
     # Set webhook URL (רצוי להגדיר ידנית מחוץ לקוד, או עם סקריפט נפרד)
-    # אפשר למחוק את הקטע הבא אם כבר הגדרת את ה-webhook ידנית
     webhook_url = os.getenv('WEBHOOK_URL')
     if webhook_url:
-        import asyncio
-        asyncio.run(application.bot.set_webhook(url=webhook_url))
+        try:
+            logger.info(f"Setting webhook to: {webhook_url}")
+            asyncio.run(application.bot.set_webhook(url=webhook_url))
+        except Exception as e:
+            logger.error(f"Failed to set webhook: {e}", exc_info=True)
 
     app.run(host="0.0.0.0", port=int(os.getenv('PORT', 5000)))
