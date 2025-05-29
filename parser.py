@@ -1,104 +1,55 @@
-# parser.py
 import re
-import json
-from typing import List, Dict
-from pathlib import Path
 
-# Load keywords from external JSON
-with open(Path(__file__).parent / "keywords.json", encoding="utf-8") as f:
-    KEYWORDS = json.load(f)
+# דוגמה בסיסית לטעינת מילות מפתח — תוכל לשלב גם קובץ JSON אם תרצה
+GEO_LIST = ["US", "UK", "CA", "AU", "DE", "FR", "IT", "ES", "NL", "GCC", "LATAM", "IL", "IN", "ZA"]
 
-GEO_KEYWORDS = KEYWORDS["geo"]
-TRAFFIC_SOURCES = KEYWORDS["sources"]
-DEAL_TYPES = KEYWORDS["deal_types"]
+SOURCE_KEYWORDS = ["SEO", "PPC", "YouTube", "Facebook", "Google", "Native", "Search", "Reddit"]
 
-
-def parse_affiliate_message(message: str) -> List[Dict[str, str]]:
-    print("[DEBUG] Parsing message:", message)
-    lines = message.strip().splitlines()
+def parse_affiliate_message(text: str):
     deals = []
-    current_deal = {}
 
-    for line in lines:
-        line = line.strip()
-        print("[DEBUG] Processing line:", line)
+    # מציאת כל הגיאואים בהודעה
+    geos = re.findall(r'\b(?:' + '|'.join(GEO_LIST) + r')\b', text.upper())
 
-        # Skip irrelevant lines (empty or headings)
-        if not line or len(line) < 2:
-            continue
+    # זיהוי ערכים
+    cpa_match = re.findall(r'CPA\s*[$€]?\s*(\d+\.?\d*)', text, re.IGNORECASE)
+    cpl_match = re.findall(r'CPL\s*[$€]?\s*(\d+\.?\d*)', text, re.IGNORECASE)
+    crg_match = re.findall(r'(?:CRG|CR)\s*(\d+)%?', text, re.IGNORECASE)
+    flat_match = re.findall(r'FLAT\s*[$€]?\s*(\d+\.?\d*)', text, re.IGNORECASE)
+    cap_match = re.findall(r'CAP\s*(\d+)', text, re.IGNORECASE)
+    funnel_match = re.findall(r'(?:Funnel|Landing)\s*[:\-]?\s*(\S+)', text, re.IGNORECASE)
 
-        # GEO detection
-        geo_match = re.match(r'^(?P<geo>[A-Z]{2,3})(\s+[-:\u2013])?', line)
-        if geo_match:
-            if current_deal:
-                deals.append(current_deal)
-                print("[DEBUG] Appending deal:", current_deal)
-                current_deal = {}
-            current_deal['GEO'] = geo_match.group('geo')
-            continue
-        for geo in GEO_KEYWORDS:
-            if geo.lower() in line.lower():
-                current_deal['GEO'] = geo
+    # מקור תנועה
+    found_sources = [s for s in SOURCE_KEYWORDS if s.lower() in text.lower()]
+    source = found_sources[0] if found_sources else ""
 
-        # CPA + CRG pattern
-        price_match = re.search(r'(\d{2,5})\$?\s*\+\s*(\d{1,2}(?:\.\d{1,2})?)%?', line)
-        if price_match:
-            current_deal['CPA'] = price_match.group(1)
-            current_deal['CRG'] = price_match.group(2)
-            current_deal['Deal Type'] = 'CPA + CRG'
-            print("[DEBUG] Matched CPA+CRG:", current_deal)
-            continue
+    # זיהוי אם מדובר בהודעת מו״מ (כוללת שינוי במחיר לדוגמה)
+    negotiation = any(word in text.lower() for word in ["updated", "new price", "instead", "was", "now"])
 
-        # CPL pattern
-        cpl_match = re.search(r'(cpl)[^\d]*(\d{2,5})', line, re.IGNORECASE)
-        if cpl_match:
-            current_deal['CPL'] = cpl_match.group(2)
-            current_deal['Deal Type'] = 'CPL'
-            print("[DEBUG] Matched CPL:", current_deal)
-            continue
+    # הרכבת הדילים
+    for geo in geos or [""]:
+        deal = {
+            "GEO": geo,
+            "CPA": cpa_match[0] if cpa_match else "",
+            "CPL": cpl_match[0] if cpl_match else "",
+            "CRG": crg_match[0] + "%" if crg_match else "",
+            "Funnel": funnel_match[0] if funnel_match else "",
+            "Cap": cap_match[0] if cap_match else "",
+            "Source": source,
+            "Deal Type": get_deal_type(text),
+            "Negotiation": negotiation
+        }
+        deals.append(deal)
 
-        # Standalone CPA detection
-        if any(deal_type in line.lower() for deal_type in DEAL_TYPES):
-            simple_price = re.search(r'(\d{2,5})\$?', line)
-            if simple_price and 'CPA' not in current_deal:
-                current_deal['CPA'] = simple_price.group(1)
-                current_deal['Deal Type'] = 'CPA'
-                print("[DEBUG] Matched CPA:", current_deal)
-            continue
-
-        # Funnel extraction
-        if any(funnel_key in line.lower() for funnel_key in KEYWORDS.get("funnels", [])) or 'mostly:' in line.lower():
-            current_deal['Funnels'] = line.split(':', 1)[-1].strip()
-            print("[DEBUG] Matched funnel:", current_deal['Funnels'])
-            continue
-
-        # Source / traffic
-        if 'source' in line.lower() or 'traffic' in line.lower():
-            current_deal['Source'] = line.split(':', 1)[-1].strip()
-            print("[DEBUG] Matched source:", current_deal['Source'])
-            continue
-        for src in TRAFFIC_SOURCES:
-            if src.lower() in line.lower():
-                current_deal['Source'] = line.strip()
-                print("[DEBUG] Matched traffic source:", src)
-                break
-
-        # CR detection (alternative to CRG)
-        cr_match = re.search(r'(\d{1,2}(?:\.\d{1,2})?)%\s*(cr|conversion)', line.lower())
-        if cr_match:
-            current_deal['CR'] = cr_match.group(1)
-            print("[DEBUG] Matched CR:", current_deal['CR'])
-
-        # Cap
-        cap_match = re.search(r'(\d{1,4})\s*(leads|cap)', line, re.IGNORECASE)
-        if cap_match:
-            current_deal['Cap'] = cap_match.group(1)
-            print("[DEBUG] Matched Cap:", current_deal['Cap'])
-
-    if current_deal:
-        deals.append(current_deal)
-        print("[DEBUG] Final appended deal:", current_deal)
-
-    print("[DEBUG] Parsed deals:", deals)
     return deals
 
+def get_deal_type(text):
+    if "CPA" in text.upper() and "CR" in text.upper():
+        return "CPA + CRG"
+    if "CPA" in text.upper():
+        return "CPA"
+    if "CPL" in text.upper():
+        return "CPL"
+    if "FLAT" in text.upper():
+        return "FLAT"
+    return "UNKNOWN"
