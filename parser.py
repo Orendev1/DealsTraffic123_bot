@@ -1,55 +1,57 @@
 import re
+from typing import List, Dict, Any
+import logging
 
-# דוגמה בסיסית לטעינת מילות מפתח — תוכל לשלב גם קובץ JSON אם תרצה
-GEO_LIST = ["US", "UK", "CA", "AU", "DE", "FR", "IT", "ES", "NL", "GCC", "LATAM", "IL", "IN", "ZA"]
+logger = logging.getLogger(__name__)
 
-SOURCE_KEYWORDS = ["SEO", "PPC", "YouTube", "Facebook", "Google", "Native", "Search", "Reddit"]
-
-def parse_affiliate_message(text: str):
-    deals = []
-
-    # מציאת כל הגיאואים בהודעה
-    geos = re.findall(r'\b(?:' + '|'.join(GEO_LIST) + r')\b', text.upper())
-
-    # זיהוי ערכים
-    cpa_match = re.findall(r'CPA\s*[$€]?\s*(\d+\.?\d*)', text, re.IGNORECASE)
-    cpl_match = re.findall(r'CPL\s*[$€]?\s*(\d+\.?\d*)', text, re.IGNORECASE)
-    crg_match = re.findall(r'(?:CRG|CR)\s*(\d+)%?', text, re.IGNORECASE)
-    flat_match = re.findall(r'FLAT\s*[$€]?\s*(\d+\.?\d*)', text, re.IGNORECASE)
-    cap_match = re.findall(r'CAP\s*(\d+)', text, re.IGNORECASE)
-    funnel_match = re.findall(r'(?:Funnel|Landing)\s*[:\-]?\s*(\S+)', text, re.IGNORECASE)
-
-    # מקור תנועה
-    found_sources = [s for s in SOURCE_KEYWORDS if s.lower() in text.lower()]
-    source = found_sources[0] if found_sources else ""
-
-    # זיהוי אם מדובר בהודעת מו״מ (כוללת שינוי במחיר לדוגמה)
-    negotiation = any(word in text.lower() for word in ["updated", "new price", "instead", "was", "now"])
-
-    # הרכבת הדילים
-    for geo in geos or [""]:
-        deal = {
-            "GEO": geo,
-            "CPA": cpa_match[0] if cpa_match else "",
-            "CPL": cpl_match[0] if cpl_match else "",
-            "CRG": crg_match[0] + "%" if crg_match else "",
-            "Funnel": funnel_match[0] if funnel_match else "",
-            "Cap": cap_match[0] if cap_match else "",
-            "Source": source,
-            "Deal Type": get_deal_type(text),
-            "Negotiation": negotiation
-        }
-        deals.append(deal)
-
-    return deals
-
-def get_deal_type(text):
-    if "CPA" in text.upper() and "CR" in text.upper():
-        return "CPA + CRG"
-    if "CPA" in text.upper():
-        return "CPA"
-    if "CPL" in text.upper():
-        return "CPL"
-    if "FLAT" in text.upper():
-        return "FLAT"
-    return "UNKNOWN"
+def parse_deal_message(text: str) -> List[Dict[str, Any]]:
+    """
+    Parse a deal message and extract relevant information.
+    Returns a list of deals, where each deal is a dictionary with the parsed information.
+    """
+    try:
+        # Initialize list to store deals
+        deals = []
+        
+        # Extract GEOs
+        geo_pattern = r'GEO:\s*([A-Za-z,\s]+)'
+        geo_match = re.search(geo_pattern, text, re.IGNORECASE)
+        if not geo_match:
+            logger.info("No GEO found in message")
+            return []
+            
+        # Split GEOs and clean them
+        geos = [geo.strip() for geo in geo_match.group(1).split(',')]
+        
+        # Extract other deal information
+        cpa_pattern = r'CPA:\s*\$?(\d+(?:\.\d+)?)'
+        crg_pattern = r'CRG?:\s*(\d+(?:\.\d+)?)%'
+        cap_pattern = r'Cap:\s*(\d+)\s*(?:leads|conversions)?'
+        source_pattern = r'Source:\s*([^\n]+)'
+        funnel_pattern = r'Funnel:\s*([^\n]+)'
+        
+        # Extract values
+        cpa_match = re.search(cpa_pattern, text, re.IGNORECASE)
+        crg_match = re.search(crg_pattern, text, re.IGNORECASE)
+        cap_match = re.search(cap_pattern, text, re.IGNORECASE)
+        source_match = re.search(source_pattern, text, re.IGNORECASE)
+        funnel_match = re.search(funnel_pattern, text, re.IGNORECASE)
+        
+        # Create a deal for each GEO
+        for geo in geos:
+            deal = {
+                'geo': geo,
+                'cpa': float(cpa_match.group(1)) if cpa_match else None,
+                'crg': float(crg_match.group(1)) if crg_match else None,
+                'cap': int(cap_match.group(1)) if cap_match else None,
+                'source': source_match.group(1).strip() if source_match else None,
+                'funnel': funnel_match.group(1).strip() if funnel_match else None,
+                'original_message': text
+            }
+            deals.append(deal)
+            
+        return deals
+        
+    except Exception as e:
+        logger.error(f"Error parsing deal message: {str(e)}")
+        return [] 
