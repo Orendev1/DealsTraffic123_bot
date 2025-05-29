@@ -9,7 +9,12 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 from telegram import Update
-from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
+from telegram.ext import (
+    ApplicationBuilder, 
+    ContextTypes, 
+    MessageHandler, 
+    filters
+)
 
 from parser import parse_affiliate_message
 
@@ -25,27 +30,39 @@ WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 if not BOT_TOKEN or not CREDENTIALS_JSON or not WEBHOOK_URL:
     raise ValueError("Missing required environment variables.")
 
-# --- Google Auth ---
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+# --- Google Auth with Scopes ---
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
 creds = Credentials.from_service_account_info(json.loads(CREDENTIALS_JSON), scopes=SCOPES)
 gc = gspread.authorize(creds)
 spreadsheet = gc.open(SPREADSHEET_NAME)
 sheet = spreadsheet.sheet1
 
+# --- Flask App for Webhook ---
+flask_app = Flask(__name__)
+
 # --- Telegram Bot ---
 bot_app = ApplicationBuilder().token(BOT_TOKEN).build()
 
+@flask_app.route("/webhook", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), bot_app.bot)
+    bot_app.update_queue.put_nowait(update)
+    return "OK"
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message is None or update.message.text is None:
-        logging.debug("[DEBUG] Skipping non-text message")
+        print("[DEBUG] Skipping non-text message")
         return
 
     message = update.message.text
     sender = update.effective_chat.title or update.effective_user.username or str(update.effective_chat.id)
-    logging.info(f"[DEBUG] Message from {sender}: {message}")
+    print(f"[DEBUG] Message from {sender}: {message}")
 
     deals = parse_affiliate_message(message)
-    logging.info("[DEBUG] Parsed deals: %s", deals)
+    print("[DEBUG] Parsed deals:", deals)
 
     for deal in deals:
         row = [
@@ -62,28 +79,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             deal.get("CR", ""),
             message
         ]
-        logging.info("[DEBUG] Writing row: %s", row)
+        print("[DEBUG] Writing row:", row)
         sheet.append_row(row, value_input_option="USER_ENTERED")
 
-# Add handler BEFORE starting webhook
-bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-# --- Webhook Server ---
-flask_app = Flask(__name__)
-
-@flask_app.route("/webhook", methods=["POST"])
-def webhook():
-    update = Update.de_json(request.get_json(force=True), bot_app.bot)
-    bot_app.update_queue.put_nowait(update)
-    return "OK"
-
-async def set_webhook():
+async def main():
+    await bot_app.initialize()
     await bot_app.bot.delete_webhook()
     await bot_app.bot.set_webhook(url=WEBHOOK_URL + "/webhook")
-    logging.info("✅ Webhook set successfully")
+    bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    print("✅ Webhook set successfully")
+    flask_app.run(host="0.0.0.0", port=8080)
 
-# --- Start ---
 if __name__ == "__main__":
     import asyncio
-    asyncio.run(set_webhook())
-    flask_app.run(host="0.0.0.0", port=8080)
+    asyncio.run(main())
