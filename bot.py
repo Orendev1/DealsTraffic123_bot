@@ -1,4 +1,3 @@
-# bot.py
 import os
 import json
 import logging
@@ -40,11 +39,15 @@ bot_app = ApplicationBuilder().token(BOT_TOKEN).build()
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message is None or update.message.text is None:
+        print("[DEBUG] Skipping non-text message")
         return
 
     message = update.message.text
     sender = update.effective_chat.title or update.effective_user.username or str(update.effective_chat.id)
+    print(f"[DEBUG] Message from {sender}: {message}")
+
     deals = parse_affiliate_message(message)
+    print("[DEBUG] Parsed deals:", deals)
 
     for deal in deals:
         row = [
@@ -61,6 +64,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             deal.get("CR", ""),
             message
         ]
+        print("[DEBUG] Writing row:", row)
         sheet.append_row(row, value_input_option="USER_ENTERED")
 
 # --- Webhook Server ---
@@ -75,7 +79,7 @@ def webhook():
 async def set_webhook():
     await bot_app.bot.delete_webhook()
     await bot_app.bot.set_webhook(url=WEBHOOK_URL + "/webhook")
-    logging.info("✅ Webhook set successfully")
+    print("✅ Webhook set successfully")
 
 # --- Start ---
 if __name__ == "__main__":
