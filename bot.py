@@ -3,13 +3,11 @@ import json
 import logging
 import sys
 from flask import Flask, request
-from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
-from telegram import Bot, Update
-from parser import parse_affiliate_message  # ודא שהקובץ parser.py קיים
+from telegram import Bot
 
-# --- Logging ---
+# --- Logging setup ---
 logging.basicConfig(level=logging.INFO)
 def crash_log(msg):
     print(f"❌ CRASH: {msg}", file=sys.stderr)
@@ -42,61 +40,23 @@ except Exception as e:
 app = Flask(__name__)
 bot = Bot(token=BOT_TOKEN)
 
-# --- Webhook route ---
+# --- Webhook route (debug only) ---
 @app.route('/webhook', methods=['POST'])
 def webhook():
     try:
-        logging.info("🚀 Webhook triggered")
         update_data = request.get_json(force=True)
-
-        if not update_data:
-            logging.warning("📭 Empty update_data")
-            return "NO DATA", 200
-
-        logging.info(f"📦 Raw update: {json.dumps(update_data)[:300]}")
-
-        update = Update.de_json(update_data, bot)
-        message = update.effective_message
-
-        if not message or not message.text:
-            logging.warning("📭 No valid message text found.")
-            return "NO TEXT", 200
-
-        logging.info(f"📩 Message received: {message.text[:100]}")
-        parsed_deals = parse_affiliate_message(message.text)
-        logging.info(f"🔍 Parsed {len(parsed_deals)} deals")
-
-        for deal in parsed_deals:
-            now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-            row = [
-                now,
-                message.chat.title or message.chat.username or "Unknown",
-                deal.get("GEO", ""),
-                deal.get("CPA", ""),
-                deal.get("CRG", ""),
-                deal.get("CPL", ""),
-                deal.get("Funnel", ""),
-                deal.get("Source", ""),
-                deal.get("Cap", ""),
-                deal.get("Deal Type", ""),
-                "Negotiation" if deal.get("Negotiation") else "",
-                message.text
-            ]
-            logging.info(f"📝 Writing row: {row}")
-            sheet.append_row(row, value_input_option="USER_ENTERED")
-
-        logging.info("✅ Webhook finished successfully")
+        logging.info("✅ Webhook reached successfully")
+        logging.info(f"🧾 Raw data: {json.dumps(update_data, indent=2)[:500]}")
         return "OK", 200
-
     except Exception as e:
-        logging.error(f"❌ Webhook error: {e}")
+        logging.error(f"❌ Webhook crash: {e}")
         return "ERROR", 500
 
-# --- Health Check route ---
+# --- Health check ---
 @app.route('/', methods=['GET'])
 def health():
     return "Bot is running", 200
 
-# --- Run Flask for Railway ---
+# --- Start Flask ---
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
