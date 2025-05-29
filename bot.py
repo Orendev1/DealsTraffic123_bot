@@ -1,3 +1,4 @@
+# bot.py
 import os
 import json
 import logging
@@ -79,11 +80,11 @@ def webhook():
 async def set_webhook():
     await bot_app.bot.delete_webhook()
     await bot_app.bot.set_webhook(url=WEBHOOK_URL + "/webhook")
-    print("✅ Webhook set successfully")
+    logging.info("✅ Webhook set successfully")
 
 # --- Start ---
 if __name__ == "__main__":
     import asyncio
+    bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))  # ✅ זה חייב להיות לפני set_webhook
     asyncio.run(set_webhook())
-    bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     flask_app.run(host="0.0.0.0", port=8080)
