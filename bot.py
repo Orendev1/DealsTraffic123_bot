@@ -3,7 +3,6 @@ import os
 import json
 import logging
 from datetime import datetime
-from flask import Flask, request
 
 import gspread
 from google.oauth2.service_account import Credentials
@@ -25,33 +24,18 @@ logging.basicConfig(level=logging.INFO)
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 SPREADSHEET_NAME = os.getenv("SPREADSHEET_NAME", "Telegram Bot Deals")
 CREDENTIALS_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # without /webhook, e.g., https://your-app.up.railway.app
 
 if not BOT_TOKEN or not CREDENTIALS_JSON or not WEBHOOK_URL:
     raise ValueError("Missing required environment variables.")
 
-# --- Google Auth with Scopes ---
-SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive"
-]
+# --- Google Sheets ---
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 creds = Credentials.from_service_account_info(json.loads(CREDENTIALS_JSON), scopes=SCOPES)
 gc = gspread.authorize(creds)
-spreadsheet = gc.open(SPREADSHEET_NAME)
-sheet = spreadsheet.sheet1
+sheet = gc.open(SPREADSHEET_NAME).sheet1
 
-# --- Flask App for Webhook ---
-flask_app = Flask(__name__)
-
-# --- Telegram Bot ---
-bot_app = ApplicationBuilder().token(BOT_TOKEN).build()
-
-@flask_app.route("/webhook", methods=["POST"])
-def webhook():
-    update = Update.de_json(request.get_json(force=True), bot_app.bot)
-    bot_app.update_queue.put_nowait(update)
-    return "OK"
-
+# --- Telegram App ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message is None or update.message.text is None:
         print("[DEBUG] Skipping non-text message")
@@ -83,12 +67,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sheet.append_row(row, value_input_option="USER_ENTERED")
 
 async def main():
-    await bot_app.initialize()
-    await bot_app.bot.delete_webhook()
-    await bot_app.bot.set_webhook(url=WEBHOOK_URL + "/webhook")
-    bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    print("✅ Webhook set successfully")
-    flask_app.run(host="0.0.0.0", port=8080)
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    await app.initialize()
+    await app.bot.delete_webhook()
+    await app.bot.set_webhook(url=WEBHOOK_URL + "/webhook")
+    await app.start()
+    await app.updater.start_webhook(
+        listen="0.0.0.0",
+        port=8080,
+        url_path="/webhook",
+        webhook_url=WEBHOOK_URL + "/webhook",
+    )
+    print("✅ Bot is ready and webhook is running.")
 
 if __name__ == "__main__":
     import asyncio
