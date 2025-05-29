@@ -3,12 +3,13 @@ import os
 import json
 import logging
 from datetime import datetime
-import gspread
-
 from flask import Flask, request
+
+import gspread
+from google.oauth2.service_account import Credentials
+
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
-from google.oauth2.service_account import Credentials
 
 from parser import parse_affiliate_message
 
@@ -38,9 +39,11 @@ sheet = spreadsheet.sheet1
 bot_app = ApplicationBuilder().token(BOT_TOKEN).build()
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message is None or update.message.text is None:
+        return
+
     message = update.message.text
     sender = update.effective_chat.title or update.effective_user.username or str(update.effective_chat.id)
-
     deals = parse_affiliate_message(message)
 
     for deal in deals:
@@ -50,10 +53,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             deal.get("GEO", ""),
             deal.get("CPA", ""),
             deal.get("CRG", ""),
+            deal.get("CPL", ""),
+            deal.get("Deal Type", ""),
             deal.get("Funnels", ""),
             deal.get("Source", ""),
             deal.get("Cap", ""),
-            message  # raw message
+            deal.get("CR", ""),
+            message
         ]
         sheet.append_row(row, value_input_option="USER_ENTERED")
 
@@ -69,7 +75,7 @@ def webhook():
 async def set_webhook():
     await bot_app.bot.delete_webhook()
     await bot_app.bot.set_webhook(url=WEBHOOK_URL + "/webhook")
-    logging.info("✅ Bot initialized and webhook set!")
+    logging.info("✅ Webhook set successfully")
 
 # --- Start ---
 if __name__ == "__main__":
