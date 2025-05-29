@@ -7,8 +7,7 @@ from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
 from telegram import Bot, Update
-from telegram.ext import Application, MessageHandler, filters, ContextTypes
-from parser import parse_affiliate_message  # ודא שהקובץ הזה קיים
+from parser import parse_affiliate_message  # ודא שהקובץ parser.py קיים
 
 # --- Logging ---
 logging.basicConfig(level=logging.INFO)
@@ -43,11 +42,19 @@ except Exception as e:
 app = Flask(__name__)
 bot = Bot(token=BOT_TOKEN)
 
-# --- Message handling manually via Flask ---
+# --- Webhook route ---
 @app.route('/webhook', methods=['POST'])
 def webhook():
     try:
+        logging.info("🚀 Webhook triggered")
         update_data = request.get_json(force=True)
+
+        if not update_data:
+            logging.warning("📭 Empty update_data")
+            return "NO DATA", 200
+
+        logging.info(f"📦 Raw update: {json.dumps(update_data)[:300]}")
+
         update = Update.de_json(update_data, bot)
         message = update.effective_message
 
@@ -75,19 +82,21 @@ def webhook():
                 "Negotiation" if deal.get("Negotiation") else "",
                 message.text
             ]
+            logging.info(f"📝 Writing row: {row}")
             sheet.append_row(row, value_input_option="USER_ENTERED")
-            logging.info(f"✅ Deal saved: {deal.get('GEO')}")
 
+        logging.info("✅ Webhook finished successfully")
         return "OK", 200
 
     except Exception as e:
         logging.error(f"❌ Webhook error: {e}")
         return "ERROR", 500
 
-# --- Health Check ---
+# --- Health Check route ---
 @app.route('/', methods=['GET'])
 def health():
     return "Bot is running", 200
 
+# --- Run Flask for Railway ---
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
